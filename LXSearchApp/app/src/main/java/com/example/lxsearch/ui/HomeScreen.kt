@@ -6,6 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -13,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.NavKey
 import com.example.lxsearch.*
+import com.example.lxsearch.service.LXJob
+import com.example.lxsearch.service.LXJobManager
 import com.example.lxsearch.theme.*
 
 @Composable
@@ -20,6 +24,9 @@ fun HomeScreen(
     onNavigate: (NavKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val jobState by LXJobManager.jobState.collectAsState()
+    val runningJob = (jobState as? com.example.lxsearch.service.JobState.Running)
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -38,24 +45,74 @@ fun HomeScreen(
             text = "File Management Tools",
             style = MaterialTheme.typography.bodyMedium,
             color = OnSurfaceVariant,
-            modifier = Modifier.padding(bottom = 28.dp)
+            modifier = Modifier.padding(bottom = if (runningJob != null) 16.dp else 28.dp)
         )
+
+        // Background Running Job Banner
+        if (runningJob != null) {
+            Card(
+                onClick = {
+                    when (runningJob.job) {
+                        is LXJob.CreateFileList -> onNavigate(CreateFileListRoute)
+                        is LXJob.NameCircle -> onNavigate(NameCircleRoute)
+                        is LXJob.MoveToTempScan,
+                        is LXJob.MoveToTempMove,
+                        is LXJob.MoveToTempRemove -> onNavigate(MoveToTempRoute)
+                        is LXJob.MoveFromSourceScan,
+                        is LXJob.MoveFromSourceMove -> onNavigate(MoveFromSourceRoute)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = PrimaryContainer),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = OnPrimaryContainer
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "JOB RUNNING IN BACKGROUND",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Primary,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = runningJob.job.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = OnPrimaryContainer,
+                        )
+                    }
+                    Text(
+                        text = "View ›",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Primary
+                    )
+                }
+            }
+        }
 
         // ── Build Tools Section ──
         SectionHeader("Build Index")
         Spacer(Modifier.height(8.dp))
 
         ActionCard(
-            title = "Create File List (V1)",
-            description = "Scan folders and files, extract bracket metadata, generate filename_list.csv",
-            accentColor = Primary,
-            onClick = { onNavigate(CreateFileListRoute) }
-        )
-        Spacer(Modifier.height(12.dp))
-
-        ActionCard(
-            title = "Create File List (V2)",
-            description = "Enhanced scan with ComicInfo.xml/json parsing, file sizes, and statistics",
+            title = "Create File List",
+            description = "Scan folders and files, extract bracket metadata, and parse ComicInfo (V1 / V2)",
             accentColor = Primary,
             onClick = { onNavigate(CreateFileListRoute) }
         )

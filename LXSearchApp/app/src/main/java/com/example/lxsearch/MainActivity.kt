@@ -38,8 +38,12 @@ class MainActivity : ComponentActivity() {
         // Copy assets on first launch
         copyAssetsIfNeeded()
 
-        // Request storage permissions
+        // Initialize notification channels
+        com.example.lxsearch.service.NotificationHelper.createNotificationChannels(this)
+
+        // Request storage & notification permissions
         requestStoragePermissions()
+        requestNotificationPermissions()
 
         enableEdgeToEdge()
         setContent {
@@ -83,6 +87,14 @@ class MainActivity : ComponentActivity() {
             }
             if (needsPermission) {
                 requestPermissionLauncher.launch(perms)
+            }
+        }
+    }
+
+    private fun requestNotificationPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             }
         }
     }

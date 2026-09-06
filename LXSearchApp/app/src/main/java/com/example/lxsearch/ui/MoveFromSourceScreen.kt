@@ -30,16 +30,36 @@ fun MoveFromSourceScreen(
     onNavigateToInputFiles: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val activity = context as ComponentActivity
-    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
+    val recentLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
-    var isScanning by remember { mutableStateOf(false) }
     var scanResult by remember { mutableStateOf<MoveFromSource.ScanResult?>(null) }
     var showMoveDialog by remember { mutableStateOf(false) }
-    var isExecuting by remember { mutableStateOf(false) }
-    var executionLogs by remember { mutableStateOf(listOf<String>()) }
     var phase by remember { mutableStateOf("idle") }
+
+    val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
+    val isScanningJob = currentJob is com.example.lxsearch.service.LXJob.MoveFromSourceScan
+    val isExecutingJob = currentJob is com.example.lxsearch.service.LXJob.MoveFromSourceMove
+
+    LaunchedEffect(jobState) {
+        val completed = jobState as? com.example.lxsearch.service.JobState.Completed
+        if (completed != null) {
+            when (completed.job) {
+                is com.example.lxsearch.service.LXJob.MoveFromSourceScan -> {
+                    (completed.resultData as? MoveFromSource.ScanResult)?.let {
+                        scanResult = it
+                        phase = "scanned"
+                    }
+                }
+                is com.example.lxsearch.service.LXJob.MoveFromSourceMove -> {
+                    phase = "moved"
+                }
+                else -> {}
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Top bar
@@ -86,26 +106,20 @@ fun MoveFromSourceScreen(
         if (phase == "idle") {
             Button(
                 onClick = {
-                    isScanning = true
-                    scope.launch {
-                        val outputDir = MainActivity.getOutputDir(activity)
-                        val inputDir = MainActivity.getInputDir(activity)
-                        scanResult = withContext(Dispatchers.IO) {
-                            MoveFromSource.scan(outputDir, inputDir)
-                        }
-                        phase = "scanned"
-                        isScanning = false
-                    }
+                    com.example.lxsearch.service.LXJobManager.startJob(
+                        context,
+                        com.example.lxsearch.service.LXJob.MoveFromSourceScan
+                    )
                 },
-                enabled = !isScanning,
+                enabled = !isAnyJobRunning,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
             ) {
-                if (isScanning) {
+                if (isScanningJob) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = OnTertiary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("Scanning...", color = OnTertiary)
+                    Text("Scanning in background...", color = OnTertiary)
                 } else {
                     Text("Scan & Match Sources", color = OnTertiary, fontWeight = FontWeight.SemiBold)
                 }
@@ -135,7 +149,7 @@ fun MoveFromSourceScreen(
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = { showMoveDialog = true },
-                    enabled = !isExecuting,
+                    enabled = !isAnyJobRunning,
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
@@ -147,7 +161,7 @@ fun MoveFromSourceScreen(
             Spacer(Modifier.height(8.dp))
 
             // Execution logs
-            if (executionLogs.isNotEmpty()) {
+            if (recentLogs.isNotEmpty() && (phase == "moved" || isExecutingJob)) {
                 Text("Execution Log", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Card(
@@ -156,10 +170,10 @@ fun MoveFromSourceScreen(
                     colors = CardDefaults.cardColors(containerColor = Background),
                 ) {
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp).padding(12.dp)) {
-                        items(executionLogs) { line ->
+                        items(recentLogs) { line ->
                             Text(
                                 text = line, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
-                                color = if (line.startsWith("ERROR")) Error else if (line.contains("Moved")) Success else OnSurfaceVariant,
+                                color = if (line.startsWith("ERROR")) Error else if (line.contains("Moved") || line.startsWith("✓")) Success else OnSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 1.dp),
                             )
                         }
@@ -231,20 +245,15 @@ fun MoveFromSourceScreen(
         AlertDialog(
             onDismissRequest = { showMoveDialog = false },
             title = { Text("Confirm Move", fontWeight = FontWeight.Bold) },
-            text = { Text("Move ${scanResult?.items?.size ?: 0} items to their matched series folders?") },
+            text = { Text("Move ${scanResult?.items?.size ?: 0} items to their matched series folders in the background?") },
             confirmButton = {
                 Button(
                     onClick = {
                         showMoveDialog = false
-                        isExecuting = true
-                        scope.launch {
-                            val logs = withContext(Dispatchers.IO) {
-                                MoveFromSource.executeMove(scanResult!!.items)
-                            }
-                            executionLogs = logs
-                            phase = "moved"
-                            isExecuting = false
-                        }
+                        com.example.lxsearch.service.LXJobManager.startJob(
+                            context,
+                            com.example.lxsearch.service.LXJob.MoveFromSourceMove(scanResult!!.items)
+                        )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
                 ) { Text("Move", color = OnTertiary) }

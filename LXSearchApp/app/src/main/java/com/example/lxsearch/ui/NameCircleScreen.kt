@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,12 +32,25 @@ fun NameCircleScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val activity = context as ComponentActivity
-    val scope = rememberCoroutineScope()
+    val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
+    val logLines by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
-    var isRunning by remember { mutableStateOf(false) }
-    var logLines by remember { mutableStateOf(listOf<String>()) }
-    var result by remember { mutableStateOf<NameCircleRelation.Result?>(null) }
+    val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.NameCircle
+    val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
+
+    val result = (jobState as? com.example.lxsearch.service.JobState.Completed)?.let {
+        if (it.job is com.example.lxsearch.service.LXJob.NameCircle) it.resultData as? NameCircleRelation.Result else null
+    }
+
+    var lastRunTimestamp by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(jobState) {
+        lastRunTimestamp = com.example.lxsearch.data.JobHistoryManager.getLastRunFormatted(
+            context,
+            com.example.lxsearch.data.JobHistoryManager.JobKey.NAME_CIRCLE
+        )
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Top bar
@@ -77,40 +91,67 @@ fun NameCircleScreen(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
+
+        // Last Run Timestamp
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceVariant.copy(alpha = 0.6f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Last run",
+                        tint = Secondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Last Run",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = OnSurfaceVariant
+                    )
+                }
+                Text(
+                    text = lastRunTimestamp ?: "Never run",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (lastRunTimestamp != null) MaterialTheme.colorScheme.onSurface else OnSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         // Run Button
         Button(
             onClick = {
-                isRunning = true
-                logLines = listOf("Starting Name-Circle Relation scan...")
-                result = null
-                scope.launch {
-                    val outputDir = MainActivity.getOutputDir(activity)
-                    val inputDir = MainActivity.getInputDir(activity)
-                    val r = withContext(Dispatchers.IO) {
-                        NameCircleRelation.run(outputDir, inputDir) { progress ->
-                            logLines = (logLines + progress.message).takeLast(100)
-                        }
-                    }
-                    result = r
-                    logLines = logLines + "✓ Complete! Series: ${r.seriesCount}, Duplicates: ${r.duplicateCount}"
-                    isRunning = false
-                }
+                com.example.lxsearch.service.LXJobManager.startJob(
+                    context,
+                    com.example.lxsearch.service.LXJob.NameCircle
+                )
             },
-            enabled = !isRunning,
+            enabled = !isAnyJobRunning,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Secondary),
         ) {
-            if (isRunning) {
+            if (isThisJobRunning) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     color = OnSecondary,
                     strokeWidth = 2.dp,
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Running...", color = OnSecondary)
+                Text("Running in background...", color = OnSecondary)
             } else {
                 Text("Build Relations", color = OnSecondary, fontWeight = FontWeight.SemiBold)
             }

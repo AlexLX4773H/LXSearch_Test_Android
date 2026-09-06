@@ -25,15 +25,41 @@ fun MoveToTempScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
+    val recentLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
-    var isScanning by remember { mutableStateOf(false) }
     var scanResult by remember { mutableStateOf<MoveToTemp.ScanResult?>(null) }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showRemoveDialog by remember { mutableStateOf(false) }
-    var isExecuting by remember { mutableStateOf(false) }
-    var executionLogs by remember { mutableStateOf(listOf<String>()) }
     var phase by remember { mutableStateOf("idle") } // idle, scanned, moved, removed
+
+    val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
+    val isScanningJob = currentJob is com.example.lxsearch.service.LXJob.MoveToTempScan
+    val isExecutingJob = currentJob is com.example.lxsearch.service.LXJob.MoveToTempMove ||
+            currentJob is com.example.lxsearch.service.LXJob.MoveToTempRemove
+
+    LaunchedEffect(jobState) {
+        val completed = jobState as? com.example.lxsearch.service.JobState.Completed
+        if (completed != null) {
+            when (completed.job) {
+                is com.example.lxsearch.service.LXJob.MoveToTempScan -> {
+                    (completed.resultData as? MoveToTemp.ScanResult)?.let {
+                        scanResult = it
+                        phase = "scanned"
+                    }
+                }
+                is com.example.lxsearch.service.LXJob.MoveToTempMove -> {
+                    phase = "moved"
+                }
+                is com.example.lxsearch.service.LXJob.MoveToTempRemove -> {
+                    phase = "removed"
+                }
+                else -> {}
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Top bar
@@ -74,22 +100,20 @@ fun MoveToTempScreen(
         if (phase == "idle") {
             Button(
                 onClick = {
-                    isScanning = true
-                    scope.launch {
-                        scanResult = withContext(Dispatchers.IO) { MoveToTemp.scan() }
-                        phase = "scanned"
-                        isScanning = false
-                    }
+                    com.example.lxsearch.service.LXJobManager.startJob(
+                        context,
+                        com.example.lxsearch.service.LXJob.MoveToTempScan
+                    )
                 },
-                enabled = !isScanning,
+                enabled = !isAnyJobRunning,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
             ) {
-                if (isScanning) {
+                if (isScanningJob) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = OnTertiary, strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("Scanning...", color = OnTertiary)
+                    Text("Scanning in background...", color = OnTertiary)
                 } else {
                     Text("Scan for Empty/Incomplete Folders", color = OnTertiary, fontWeight = FontWeight.SemiBold)
                 }
@@ -124,7 +148,7 @@ fun MoveToTempScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { showMoveDialog = true },
-                        enabled = result.moveItems.isNotEmpty() && !isExecuting,
+                        enabled = result.moveItems.isNotEmpty() && !isAnyJobRunning,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
@@ -133,7 +157,7 @@ fun MoveToTempScreen(
                     }
                     OutlinedButton(
                         onClick = { showRemoveDialog = true },
-                        enabled = result.emptyFolders.isNotEmpty() && !isExecuting,
+                        enabled = result.emptyFolders.isNotEmpty() && !isAnyJobRunning,
                         modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(10.dp),
                     ) {
@@ -145,7 +169,7 @@ fun MoveToTempScreen(
             Spacer(Modifier.height(8.dp))
 
             // Execution logs
-            if (executionLogs.isNotEmpty()) {
+            if (recentLogs.isNotEmpty() && (phase == "moved" || phase == "removed" || isExecutingJob)) {
                 Text("Execution Log", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 Card(
@@ -154,10 +178,10 @@ fun MoveToTempScreen(
                     colors = CardDefaults.cardColors(containerColor = Background),
                 ) {
                     LazyColumn(modifier = Modifier.heightIn(max = 200.dp).padding(12.dp)) {
-                        items(executionLogs) { line ->
+                        items(recentLogs) { line ->
                             Text(
                                 text = line, fontFamily = FontFamily.Monospace, fontSize = 11.sp,
-                                color = if (line.startsWith("ERROR")) Error else if (line.contains("Moved") || line.contains("Removed")) Success else OnSurfaceVariant,
+                                color = if (line.startsWith("ERROR")) Error else if (line.contains("Moved") || line.contains("Removed") || line.startsWith("✓")) Success else OnSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 1.dp),
                             )
                         }
@@ -191,20 +215,15 @@ fun MoveToTempScreen(
         AlertDialog(
             onDismissRequest = { showMoveDialog = false },
             title = { Text("Confirm Move", fontWeight = FontWeight.Bold) },
-            text = { Text("Move ${scanResult?.moveItems?.size ?: 0} items to temp destinations?") },
+            text = { Text("Move ${scanResult?.moveItems?.size ?: 0} items to temp destinations in the background?") },
             confirmButton = {
                 Button(
                     onClick = {
                         showMoveDialog = false
-                        isExecuting = true
-                        scope.launch {
-                            val logs = withContext(Dispatchers.IO) {
-                                MoveToTemp.executeMove(scanResult!!.moveItems)
-                            }
-                            executionLogs = logs
-                            phase = "moved"
-                            isExecuting = false
-                        }
+                        com.example.lxsearch.service.LXJobManager.startJob(
+                            context,
+                            com.example.lxsearch.service.LXJob.MoveToTempMove(scanResult!!.moveItems)
+                        )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Tertiary),
                 ) { Text("Move", color = OnTertiary) }
@@ -220,20 +239,15 @@ fun MoveToTempScreen(
         AlertDialog(
             onDismissRequest = { showRemoveDialog = false },
             title = { Text("Confirm Remove", fontWeight = FontWeight.Bold, color = Error) },
-            text = { Text("Remove ${scanResult?.emptyFolders?.size ?: 0} empty folders? This cannot be undone.") },
+            text = { Text("Remove ${scanResult?.emptyFolders?.size ?: 0} empty folders in the background? This cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
                         showRemoveDialog = false
-                        isExecuting = true
-                        scope.launch {
-                            val logs = withContext(Dispatchers.IO) {
-                                MoveToTemp.executeRemove(scanResult!!.emptyFolders)
-                            }
-                            executionLogs = executionLogs + logs
-                            phase = "removed"
-                            isExecuting = false
-                        }
+                        com.example.lxsearch.service.LXJobManager.startJob(
+                            context,
+                            com.example.lxsearch.service.LXJob.MoveToTempRemove(scanResult!!.emptyFolders)
+                        )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Error),
                 ) { Text("Remove", color = OnError) }

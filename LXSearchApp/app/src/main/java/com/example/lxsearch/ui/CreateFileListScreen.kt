@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,13 +34,25 @@ fun CreateFileListScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val activity = context as ComponentActivity
-    val scope = rememberCoroutineScope()
+    val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
+    val logLines by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
     var isV2 by remember { mutableStateOf(false) }
-    var isRunning by remember { mutableStateOf(false) }
-    var logLines by remember { mutableStateOf(listOf<String>()) }
-    var resultCount by remember { mutableIntStateOf(-1) }
+
+    val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.CreateFileList
+    val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
+
+    val completedCount = (jobState as? com.example.lxsearch.service.JobState.Completed)?.let {
+        if (it.job is com.example.lxsearch.service.LXJob.CreateFileList) it.resultData as? Int else null
+    }
+
+    var lastRunTimestamp by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isV2, jobState) {
+        val key = if (isV2) com.example.lxsearch.data.JobHistoryManager.JobKey.CREATE_FILE_LIST_V2 else com.example.lxsearch.data.JobHistoryManager.JobKey.CREATE_FILE_LIST_V1
+        lastRunTimestamp = com.example.lxsearch.data.JobHistoryManager.getLastRunFormatted(context, key)
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // Top bar
@@ -74,7 +87,7 @@ fun CreateFileListScreen(
         ) {
             FilterChip(
                 selected = !isV2,
-                onClick = { if (!isRunning) isV2 = false },
+                onClick = { if (!isAnyJobRunning) isV2 = false },
                 label = { Text("V1 — Basic") },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = PrimaryContainer,
@@ -84,7 +97,7 @@ fun CreateFileListScreen(
             Spacer(Modifier.width(12.dp))
             FilterChip(
                 selected = isV2,
-                onClick = { if (!isRunning) isV2 = true },
+                onClick = { if (!isAnyJobRunning) isV2 = true },
                 label = { Text("V2 — Enhanced") },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = PrimaryContainer,
@@ -112,55 +125,74 @@ fun CreateFileListScreen(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
+
+        // Last Run Timestamp
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceVariant.copy(alpha = 0.6f)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Last run",
+                        tint = Primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Last Run",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = OnSurfaceVariant
+                    )
+                }
+                Text(
+                    text = lastRunTimestamp ?: "Never run",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (lastRunTimestamp != null) MaterialTheme.colorScheme.onSurface else OnSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         // Run Button
         Button(
             onClick = {
-                isRunning = true
-                logLines = listOf("Starting ${if (isV2) "V2" else "V1"} scan...")
-                resultCount = -1
-                scope.launch {
-                    val outputDir = MainActivity.getOutputDir(activity)
-                    val inputDir = MainActivity.getInputDir(activity)
-                    val count = withContext(Dispatchers.IO) {
-                        if (isV2) {
-                            CreateFileListV2.run(outputDir, inputDir) { progress ->
-                                val newLine = "${progress.current}: ${progress.name}"
-                                logLines = (logLines + newLine).takeLast(100)
-                            }
-                        } else {
-                            CreateFileListV1.run(outputDir, inputDir) { progress ->
-                                val newLine = "${progress.current}: ${progress.name}"
-                                logLines = (logLines + newLine).takeLast(100)
-                            }
-                        }
-                    }
-                    resultCount = count
-                    logLines = logLines + "✓ Complete! Processed $count items."
-                    isRunning = false
-                }
+                com.example.lxsearch.service.LXJobManager.startJob(
+                    context,
+                    com.example.lxsearch.service.LXJob.CreateFileList(isV2)
+                )
             },
-            enabled = !isRunning,
+            enabled = !isAnyJobRunning,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Primary),
         ) {
-            if (isRunning) {
+            if (isThisJobRunning) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     color = OnPrimary,
                     strokeWidth = 2.dp,
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Running...", color = OnPrimary)
+                Text("Running in background...", color = OnPrimary)
             } else {
                 Text("Run ${if (isV2) "V2" else "V1"} Scan", color = OnPrimary, fontWeight = FontWeight.SemiBold)
             }
         }
 
         // Result count
-        if (resultCount >= 0) {
+        if (completedCount != null && completedCount >= 0) {
             Spacer(Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -173,7 +205,7 @@ fun CreateFileListScreen(
                 ) {
                     Text("Total Items Processed", color = OnSecondaryContainer)
                     Text(
-                        "$resultCount",
+                        "$completedCount",
                         color = OnSecondaryContainer,
                         fontWeight = FontWeight.Bold,
                     )
