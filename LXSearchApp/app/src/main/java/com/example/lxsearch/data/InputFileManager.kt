@@ -41,6 +41,7 @@ oneshot
 .*[\s_]*_chapter$
 .*[\s_]*_chapter_[a-f0-9]{6,}$
 [\s\d-]*chapter_[a-f0-9]{6,}$
+[.]*nomedia
 """.trimIndent()
 
     val DEFAULT_BRACKETS_TXT = """

@@ -214,6 +214,8 @@ object CreateFileListV2 {
     fun run(
         outputDir: File,
         inputDir: File,
+        foldersDirs: List<String> = READ_ROOT_DIR_FOR_FOLDERS,
+        filesDirs: List<String> = READ_ROOT_DIR_FOR_FILES,
         isCancelled: () -> Boolean = { false },
         onProgress: (Progress) -> Unit = {}
     ): Int {
@@ -235,7 +237,7 @@ object CreateFileListV2 {
         finalList.add(V2_LIST_CSV_HEADERS.map { it })
 
         // Scan directories for folders
-        val dirsToScan = resolveReadDirectories(READ_ROOT_DIR_FOR_FOLDERS)
+        val dirsToScan = resolveReadDirectories(foldersDirs)
         for (rootDir in dirsToScan) {
             if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V2) aborted by user")
             val rootFile = File(rootDir)
@@ -247,7 +249,7 @@ object CreateFileListV2 {
                     val mystring = file.name.lowercase().trim()
                     val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
 
-                    if (checkRe(first, excludeChapterRe)) return@forEach
+                    if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) return@forEach
 
                     val second = file.absolutePath
                     tempStringBuilder.append("$first ::: $second\n")
@@ -299,7 +301,8 @@ object CreateFileListV2 {
         }
 
         // Scan directories for files
-        for (rootDir in READ_ROOT_DIR_FOR_FILES) {
+        val fileDirsToScan = resolveReadDirectories(filesDirs)
+        for (rootDir in fileDirsToScan) {
             if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V2) aborted by user")
             val rootFile = File(rootDir)
             if (!rootFile.exists() || !rootFile.isDirectory) continue
@@ -309,10 +312,48 @@ object CreateFileListV2 {
                 if (file.isFile) {
                     val mystring = file.name.lowercase().trim()
                     val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
+                    val nameNoExt = file.nameWithoutExtension.lowercase().trim()
+                    val firstNoExt = nameNoExt.replace(Regex("[^A-Za-z0-9]+"), "")
+
+                    if (checkRe(first, excludeChapterRe) ||
+                        checkRe(mystring, excludeChapterRe) ||
+                        checkRe(nameNoExt, excludeChapterRe) ||
+                        checkRe(firstNoExt, excludeChapterRe)) return@forEach
+
                     val second = file.absolutePath
                     tempStringBuilder.append("$first ::: $second\n")
                     count++
                     onProgress(Progress(count, first))
+
+                    val mystring2 = file.name
+                    if (mystring2.isBlank()) return@forEach
+
+                    val result = extractBrackets(mystring2)
+                    val baseRow = listOf(
+                        mystring2, second,
+                        result.extractedName,
+                        result.circleList.toString(),
+                        result.curlyList.toString(),
+                        result.equalList.toString(),
+                        result.authorList.toString(),
+                        result.tagList.toString(),
+                        result.mainTitles.toString(),
+                        result.mainTitlesPressed.toString(),
+                        result.namePressed
+                    ) // 11 fields
+
+                    val xmlItems = List(9) { "" }
+                    val fileSize = file.length()
+                    val readableSize = convertBytesToReadableSize(fileSize)
+
+                    val fullRow = baseRow + xmlItems + listOf(
+                        "1",
+                        "false",
+                        readableSize,
+                        "1",
+                        readableSize
+                    ) // 25 fields total
+                    finalList.add(fullRow)
                 }
             }
         }

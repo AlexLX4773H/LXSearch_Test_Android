@@ -43,8 +43,36 @@ class SearchEngine {
             }
         }
 
-        // Load CSV data
+        // Load data: prefer list.txt, fallback to filename_list.csv
+        val listFile = File(outputDir, "list.txt")
         val csvFile = File(outputDir, "filename_list.csv")
+
+        if (listFile.exists()) {
+            try {
+                BufferedReader(FileReader(listFile, Charsets.UTF_8)).use { reader ->
+                    reader.forEachLine { line ->
+                        val trimmed = line.trim()
+                        if (trimmed.isEmpty() || !trimmed.contains(" ::: ")) return@forEachLine
+                        val parts = trimmed.split(" ::: ", limit = 2)
+                        val first = parts[0].trim()
+                        val second = parts[1].trim()
+                        val name = File(second).name
+                        listDictData.add(
+                            mapOf(
+                                "Name" to name,
+                                "Folder" to second,
+                                "Name Pressed" to first
+                            )
+                        )
+                    }
+                }
+                isLoaded = true
+                return true
+            } catch (_: Exception) {
+                // fallback to csv
+            }
+        }
+
         if (!csvFile.exists()) return false
 
         try {

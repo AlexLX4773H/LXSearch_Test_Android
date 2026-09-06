@@ -50,7 +50,7 @@ fun SearchScreen(
             val inputDir = MainActivity.getInputDir(activity)
             val success = searchEngine.load(outputDir, inputDir)
             if (!success) {
-                loadError = "Could not load filename_list.csv. Run 'Create File List' first."
+                loadError = "Could not load data (list.txt or filename_list.csv). Run 'Create File List' first."
             }
         }
         isLoading = false

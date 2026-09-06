@@ -315,7 +315,7 @@ for root_dir in read_root_dir_for_folders:
             mystring = os.path.basename(filename)
             mystring = mystring.lower().strip()
             first = re.sub('[^A-Za-z0-9]+', '', mystring)
-            if check_re(first, exclude_chapter_re):
+            if check_re(first, exclude_chapter_re) or check_re(mystring, exclude_chapter_re):
                 continue
             second = str(filename)
             both = first + " ::: " + second + "\n"
@@ -354,11 +354,34 @@ for root_dir in read_root_dir_for_files:
             mystring = os.path.basename(filename)
             mystring = mystring.lower().strip()
             first = re.sub('[^A-Za-z0-9]+', '', mystring)
+            name_no_ext = os.path.splitext(mystring)[0]
+            first_no_ext = re.sub('[^A-Za-z0-9]+', '', name_no_ext)
+            if (check_re(first, exclude_chapter_re) or
+                check_re(mystring, exclude_chapter_re) or
+                check_re(name_no_ext, exclude_chapter_re) or
+                check_re(first_no_ext, exclude_chapter_re)):
+                continue
             second = str(filename)
             both = first + " ::: " + second + "\n"
             temp_string += both
             count+=1
             print(first, ' - ', count)
+
+            mystring2 = os.path.basename(filename)
+            if mystring2.isspace() or len(mystring2) == 0:
+                continue
+            xyz = extract_brackets(mystring2)
+            final_xyz = [mystring2, second] + list(xyz) #11 fields
+
+            xml_items = [''] * 9
+            try:
+                file_size = os.path.getsize(filename)
+                readable_size = convert_bytes_to_readable_size(file_size)
+            except Exception:
+                readable_size = "0 B"
+
+            final_xyz_v2 = final_xyz + xml_items + [1, False, readable_size, 1, readable_size] #25 fields
+            final_list.append(final_xyz_v2) #25 fields
 
 f = open(os.path.join(folder_name_output, "list.txt"), "w", newline="", encoding="utf-8")
 f.write(temp_string)

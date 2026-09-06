@@ -108,14 +108,31 @@ for line in f:
     exclude_input_chapter_sep.append(" "+line.strip()+" ")
 f.close
 
-with open(os.path.join(folder_name_output, "filename_list.csv"), "r", encoding="utf-8") as csvfile:
-    reader = csv.reader(csvfile, delimiter = list_csv_delimiter, skipinitialspace=True)
-    headers = next(reader)
-    for row in reader:
-        line = dict(zip(headers, row))
-        for convert_to_list in list_csv_headers_that_are_list:
-            line[convert_to_list] = ast.literal_eval(line[convert_to_list])
-        list_dict_data.append(line)
+list_file = os.path.join(folder_name_output, "list.txt")
+if os.path.exists(list_file):
+    with open(list_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or " ::: " not in line:
+                continue
+            first, second = line.split(" ::: ", 1)
+            first = first.strip()
+            second = second.strip()
+            name = os.path.basename(second)
+            list_dict_data.append({
+                "Name": name,
+                "Folder": second,
+                "Name Pressed": first
+            })
+else:
+    with open(os.path.join(folder_name_output, "filename_list.csv"), "r", encoding="utf-8") as csvfile:
+        reader = csv.reader(csvfile, delimiter = list_csv_delimiter, skipinitialspace=True)
+        headers = next(reader)
+        for row in reader:
+            line = dict(zip(headers, row))
+            for convert_to_list in list_csv_headers_that_are_list:
+                line[convert_to_list] = ast.literal_eval(line[convert_to_list])
+            list_dict_data.append(line)
 
 def check_list(string_input_values, column_type="Name Pressed"):
     list_set = []
