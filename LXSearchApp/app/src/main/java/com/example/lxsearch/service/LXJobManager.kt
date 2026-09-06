@@ -57,6 +57,10 @@ sealed interface JobState {
         val resultData: Any? = null
     ) : JobState
 
+    data class Cancelled(
+        val job: LXJob
+    ) : JobState
+
     data class Failed(
         val job: LXJob,
         val errorMessage: String
@@ -91,12 +95,17 @@ object LXJobManager {
 
     fun isJobRunning(): Boolean = _jobState.value is JobState.Running
 
+    @Volatile
+    var isCancelled: Boolean = false
+        private set
+
     @Synchronized
     fun startJob(context: Context, job: LXJob): Boolean {
         if (_jobState.value is JobState.Running) {
             return false
         }
 
+        isCancelled = false
         _recentLogs.value = listOf("Starting ${job.title}...")
         _jobState.value = JobState.Running(job, "Starting ${job.title}...")
 
@@ -109,7 +118,39 @@ object LXJobManager {
     }
 
     @Synchronized
+    fun cancelJob(context: Context) {
+        if (_jobState.value is JobState.Running) {
+            isCancelled = true
+            addLog("Cancelling job...")
+            val intent = Intent(context, LXJobService::class.java).apply {
+                action = LXJobService.ACTION_CANCEL
+            }
+            context.startService(intent)
+        }
+    }
+
+    @Synchronized
+    fun notifyJobCancelled(job: LXJob) {
+        val current = _jobState.value
+        if (current is JobState.Running) {
+            _jobState.value = JobState.Cancelled(job)
+            addLog("⚠ ${job.title} aborted by user.")
+        }
+    }
+
+    @Synchronized
+    fun cancelJobForTesting() {
+        val current = _jobState.value
+        if (current is JobState.Running) {
+            isCancelled = true
+            _jobState.value = JobState.Cancelled(current.job)
+            addLog("⚠ ${current.job.title} aborted by user.")
+        }
+    }
+
+    @Synchronized
     fun startJobStateForTesting(job: LXJob) {
+        isCancelled = false
         _recentLogs.value = listOf("Starting ${job.title}...")
         _jobState.value = JobState.Running(job, "Starting ${job.title}...")
     }

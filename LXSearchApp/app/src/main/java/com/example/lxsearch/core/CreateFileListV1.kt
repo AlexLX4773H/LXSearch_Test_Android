@@ -23,6 +23,7 @@ object CreateFileListV1 {
     fun run(
         outputDir: File,
         inputDir: File,
+        isCancelled: () -> Boolean = { false },
         onProgress: (Progress) -> Unit = {}
     ): Int {
         outputDir.mkdirs()
@@ -45,10 +46,12 @@ object CreateFileListV1 {
         // Scan directories for folders
         val dirsToScan = resolveReadDirectories(READ_ROOT_DIR_FOR_FOLDERS)
         for (rootDir in dirsToScan) {
+            if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
             val rootFile = File(rootDir)
             if (!rootFile.exists() || !rootFile.isDirectory) continue
 
             rootFile.walkTopDown().forEach { file ->
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
                 if (file.isDirectory && file != rootFile) {
                     val mystring = file.name.lowercase().trim()
                     val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
@@ -83,10 +86,12 @@ object CreateFileListV1 {
 
         // Scan directories for files
         for (rootDir in READ_ROOT_DIR_FOR_FILES) {
+            if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
             val rootFile = File(rootDir)
             if (!rootFile.exists() || !rootFile.isDirectory) continue
 
             rootFile.walkTopDown().forEach { file ->
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
                 if (file.isFile) {
                     val mystring = file.name.lowercase().trim()
                     val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
@@ -98,18 +103,36 @@ object CreateFileListV1 {
             }
         }
 
-        // Write list.txt
-        File(outputDir, "list.txt").writeText(tempStringBuilder.toString(), Charsets.UTF_8)
+        if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
 
-        // Write count.txt
-        File(outputDir, "count.txt").writeText(count.toString(), Charsets.UTF_8)
+        val tempListFile = File(outputDir, "list.txt.tmp")
+        val tempCountFile = File(outputDir, "count.txt.tmp")
+        val tempCsvFile = File(outputDir, "filename_list.csv.tmp")
 
-        // Write filename_list.csv
-        BufferedWriter(FileWriter(File(outputDir, "filename_list.csv"), Charsets.UTF_8)).use { writer ->
-            for (row in finalList) {
-                writer.write(row.joinToString(LIST_CSV_DELIMITER.toString()))
-                writer.newLine()
+        try {
+            // Write to temporary files first
+            tempListFile.writeText(tempStringBuilder.toString(), Charsets.UTF_8)
+            tempCountFile.writeText(count.toString(), Charsets.UTF_8)
+
+            BufferedWriter(FileWriter(tempCsvFile, Charsets.UTF_8)).use { writer ->
+                for (row in finalList) {
+                    if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
+                    writer.write(row.joinToString(LIST_CSV_DELIMITER.toString()))
+                    writer.newLine()
+                }
             }
+
+            if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
+
+            // Atomically replace target files only when completed
+            safeAtomicReplace(tempListFile, File(outputDir, "list.txt"))
+            safeAtomicReplace(tempCountFile, File(outputDir, "count.txt"))
+            safeAtomicReplace(tempCsvFile, File(outputDir, "filename_list.csv"))
+        } catch (t: Throwable) {
+            tempListFile.delete()
+            tempCountFile.delete()
+            tempCsvFile.delete()
+            throw t
         }
 
         onProgress(Progress(count, "Done", done = true))

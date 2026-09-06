@@ -41,7 +41,14 @@ class LXJobService : Service() {
         }
     }
 
+    private var activeExecutionJob: kotlinx.coroutines.Job? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_CANCEL) {
+            activeExecutionJob?.cancel()
+            return START_NOT_STICKY
+        }
+
         val job = LXJobManager.pendingJob
         if (job == null) {
             stopSelf()
@@ -74,7 +81,7 @@ class LXJobService : Service() {
 
         wakeLock?.acquire(30 * 60 * 1000L) // 30 minutes max safety limit
 
-        serviceScope.launch {
+        activeExecutionJob = serviceScope.launch {
             executeJob(job)
         }
 
@@ -106,15 +113,16 @@ class LXJobService : Service() {
 
             var summary = ""
             var resultData: Any? = null
+            val isCancelledCheck = { LXJobManager.isCancelled || !(activeExecutionJob?.isActive ?: true) }
 
             when (job) {
                 is LXJob.CreateFileList -> {
                     val count = if (job.isV2) {
-                        CreateFileListV2.run(outputDir, inputDir) { progress ->
+                        CreateFileListV2.run(outputDir, inputDir, isCancelled = isCancelledCheck) { progress ->
                             updateProgress("${progress.current}: ${progress.name}", progress.current)
                         }
                     } else {
-                        CreateFileListV1.run(outputDir, inputDir) { progress ->
+                        CreateFileListV1.run(outputDir, inputDir, isCancelled = isCancelledCheck) { progress ->
                             updateProgress("${progress.current}: ${progress.name}", progress.current)
                         }
                     }
@@ -124,7 +132,7 @@ class LXJobService : Service() {
                     com.example.lxsearch.data.JobHistoryManager.recordLastRun(this@LXJobService, key)
                 }
                 is LXJob.NameCircle -> {
-                    val r = NameCircleRelation.run(outputDir, inputDir) { progress ->
+                    val r = NameCircleRelation.run(outputDir, inputDir, isCancelled = isCancelledCheck) { progress ->
                         updateProgress(progress.message)
                     }
                     summary = "Processed ${r.seriesCount} series (${r.duplicateCount} duplicates found)."
@@ -173,6 +181,14 @@ class LXJobService : Service() {
                 summary,
                 isSuccess = true
             )
+        } catch (ce: java.util.concurrent.CancellationException) {
+            LXJobManager.notifyJobCancelled(job)
+            NotificationHelper.showCompletionNotification(
+                this@LXJobService,
+                job.title,
+                "Job was aborted by user.",
+                isSuccess = false
+            )
         } catch (t: Throwable) {
             val errorMsg = t.message ?: "An unexpected error occurred."
             LXJobManager.failJob(errorMsg)
@@ -200,4 +216,8 @@ class LXJobService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val ACTION_CANCEL = "com.example.lxsearch.service.ACTION_CANCEL"
+    }
 }

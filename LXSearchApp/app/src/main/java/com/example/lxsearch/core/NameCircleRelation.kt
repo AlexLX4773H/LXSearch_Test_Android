@@ -180,6 +180,7 @@ object NameCircleRelation {
         outputDir: File,
         inputDir: File,
         rootDirs: List<String>? = null,
+        isCancelled: () -> Boolean = { false },
         onProgress: (Progress) -> Unit = {}
     ): Result {
         val dirsToScan = rootDirs ?: DEFAULT_ROOT_DIRS.filter { File(it).exists() }.ifEmpty { DEFAULT_ROOT_DIRS }
@@ -191,6 +192,7 @@ object NameCircleRelation {
         val outputDict = mutableMapOf<String, MutableList<String>>()
 
         for (rootDir in dirsToScan) {
+            if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
             val rootFile = File(rootDir)
             if (!rootFile.exists()) {
                 onProgress(Progress("Directory not found: $rootDir"))
@@ -201,6 +203,7 @@ object NameCircleRelation {
             val seriesFolders = rootFile.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name } ?: continue
 
             for (seriesDir in seriesFolders) {
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
                 // Skip exception folders
                 if (!checkValid(seriesDir.name, EXCEPTION_LIST_FOLDER_START)) continue
 
@@ -208,6 +211,7 @@ object NameCircleRelation {
 
                 val bookFolders = seriesDir.listFiles()?.filter { it.isDirectory } ?: continue
                 for (bookDir in bookFolders) {
+                    if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
                     // Extract from brackets in folder name
                     seriesElements.addAll(extractBracketsParody(bookDir.name, excludeBrackets, excludeBracketsRe))
                     // Extract from ComicInfo
@@ -223,44 +227,66 @@ object NameCircleRelation {
             }
         }
 
+        if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
+
         onProgress(Progress("Writing Data..."))
 
-        // 1. JSON output
-        val jsonArray = JSONArray()
-        for ((name, list) in outputDict) {
-            val obj = JSONObject()
-            obj.put("Name", name)
-            obj.put("List", JSONArray(list))
-            jsonArray.put(obj)
-        }
-        File(outputDir, "output_list_name.json").writeText(jsonArray.toString(4), Charsets.UTF_8)
+        val tempJsonFile = File(outputDir, "output_list_name.json.tmp")
+        val tempDupFile = File(outputDir, "output_duplicate.txt.tmp")
+        val tempCsvFile = File(outputDir, "output_list_name.csv.tmp")
 
-        // 2. Duplicate detection
         var countDup = 0
-        val dupBuilder = StringBuilder()
-        val fillListTmp = mutableSetOf<String>()
-        for ((_, items) in outputDict) {
-            val intersection = fillListTmp.intersect(items.toSet())
-            if (intersection.isNotEmpty()) {
-                for (i in intersection) {
-                    dupBuilder.appendLine(i)
-                    countDup++
-                }
+        try {
+            // 1. JSON output
+            val jsonArray = JSONArray()
+            for ((name, list) in outputDict) {
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
+                val obj = JSONObject()
+                obj.put("Name", name)
+                obj.put("List", JSONArray(list))
+                jsonArray.put(obj)
             }
-            fillListTmp.addAll(items)
-        }
-        File(outputDir, "output_duplicate.txt").writeText(dupBuilder.toString(), Charsets.UTF_8)
+            tempJsonFile.writeText(jsonArray.toString(4), Charsets.UTF_8)
 
-        // 3. CSV output
-        BufferedWriter(FileWriter(File(outputDir, "output_list_name.csv"), Charsets.UTF_8)).use { writer ->
-            writer.write("Name${LIST_CSV_DELIMITER}Element")
-            writer.newLine()
-            for ((name, items) in outputDict) {
-                for (item in items) {
-                    writer.write("$name${LIST_CSV_DELIMITER}$item")
-                    writer.newLine()
+            // 2. Duplicate detection
+            val dupBuilder = StringBuilder()
+            val fillListTmp = mutableSetOf<String>()
+            for ((_, items) in outputDict) {
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
+                val intersection = fillListTmp.intersect(items.toSet())
+                if (intersection.isNotEmpty()) {
+                    for (i in intersection) {
+                        dupBuilder.appendLine(i)
+                        countDup++
+                    }
+                }
+                fillListTmp.addAll(items)
+            }
+            tempDupFile.writeText(dupBuilder.toString(), Charsets.UTF_8)
+
+            // 3. CSV output
+            BufferedWriter(FileWriter(tempCsvFile, Charsets.UTF_8)).use { writer ->
+                writer.write("Name${LIST_CSV_DELIMITER}Element")
+                writer.newLine()
+                for ((name, items) in outputDict) {
+                    if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
+                    for (item in items) {
+                        writer.write("$name${LIST_CSV_DELIMITER}$item")
+                        writer.newLine()
+                    }
                 }
             }
+
+            if (isCancelled()) throw java.util.concurrent.CancellationException("Build Name-Circle Relations aborted by user")
+
+            safeAtomicReplace(tempJsonFile, File(outputDir, "output_list_name.json"))
+            safeAtomicReplace(tempDupFile, File(outputDir, "output_duplicate.txt"))
+            safeAtomicReplace(tempCsvFile, File(outputDir, "output_list_name.csv"))
+        } catch (t: Throwable) {
+            tempJsonFile.delete()
+            tempDupFile.delete()
+            tempCsvFile.delete()
+            throw t
         }
 
         val result = Result(outputDict.size, countDup)

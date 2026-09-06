@@ -4,12 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,8 +25,10 @@ fun HomeScreen(
     onNavigate: (NavKey) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val jobState by LXJobManager.jobState.collectAsState()
     val runningJob = (jobState as? com.example.lxsearch.service.JobState.Running)
+    var showCancelDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -102,7 +105,45 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold,
                         color = Primary
                     )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { showCancelDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cancel job",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
+            }
+
+            if (showCancelDialog) {
+                AlertDialog(
+                    onDismissRequest = { showCancelDialog = false },
+                    title = { Text("Abort ${runningJob.job.title}?") },
+                    text = {
+                        Text("Are you sure you want to cancel this running background job? Scanning will stop immediately and existing files will be kept untouched.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showCancelDialog = false
+                                LXJobManager.cancelJob(context)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Abort Job", color = MaterialTheme.colorScheme.onError)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showCancelDialog = false }) {
+                            Text("Keep Running")
+                        }
+                    }
+                )
             }
         }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -38,11 +39,14 @@ fun NameCircleScreen(
 
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
     val completedState = jobState as? com.example.lxsearch.service.JobState.Completed
+    val cancelledState = jobState as? com.example.lxsearch.service.JobState.Cancelled
     val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.NameCircle
     val isThisJobCompleted = completedState?.job is com.example.lxsearch.service.LXJob.NameCircle
+    val isThisJobCancelled = cancelledState?.job is com.example.lxsearch.service.LXJob.NameCircle
     val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
 
-    val logLines = if (isThisJobRunning || isThisJobCompleted) allLogs else emptyList()
+    val logLines = if (isThisJobRunning || isThisJobCompleted || isThisJobCancelled) allLogs else emptyList()
+    var showCancelDialog by remember { mutableStateOf(false) }
 
     val result = if (isThisJobCompleted) {
         completedState.resultData as? NameCircleRelation.Result
@@ -137,29 +141,99 @@ fun NameCircleScreen(
         Spacer(Modifier.height(14.dp))
 
         // Run Button
-        Button(
-            onClick = {
-                com.example.lxsearch.service.LXJobManager.startJob(
-                    context,
-                    com.example.lxsearch.service.LXJob.NameCircle
-                )
-            },
-            enabled = !isAnyJobRunning,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Secondary),
-        ) {
-            if (isThisJobRunning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = OnSecondary,
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("Running in background...", color = OnSecondary)
-            } else {
+        // Run / Cancel Action Area
+        if (isThisJobRunning) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Secondary.copy(alpha = 0.85f),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = OnSecondary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Building Relations...",
+                            color = OnSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { showCancelDialog = true },
+                    modifier = Modifier.height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cancel",
+                        tint = MaterialTheme.colorScheme.onError,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Cancel",
+                        color = MaterialTheme.colorScheme.onError,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            Button(
+                onClick = {
+                    com.example.lxsearch.service.LXJobManager.startJob(
+                        context,
+                        com.example.lxsearch.service.LXJob.NameCircle
+                    )
+                },
+                enabled = !isAnyJobRunning,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Secondary),
+            ) {
                 Text("Build Relations", color = OnSecondary, fontWeight = FontWeight.SemiBold)
             }
+        }
+
+        if (showCancelDialog) {
+            AlertDialog(
+                onDismissRequest = { showCancelDialog = false },
+                title = { Text("Abort Relation Building?") },
+                text = {
+                    Text("Are you sure you want to cancel building name-circle relations? Scanning will stop immediately and existing mapping files will be kept untouched.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showCancelDialog = false
+                            com.example.lxsearch.service.LXJobManager.cancelJob(context)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Abort Job", color = MaterialTheme.colorScheme.onError)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCancelDialog = false }) {
+                        Text("Keep Running")
+                    }
+                }
+            )
         }
 
         // Result summary

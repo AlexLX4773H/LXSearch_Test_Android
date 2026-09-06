@@ -114,4 +114,15 @@ class UtilityFunctionsTest {
             assertTrue("Mihon candidate $name should contain Hentai", name.contains("Hentai", ignoreCase = true))
         }
     }
+
+    @Test
+    fun testSafeAtomicReplace() {
+        val destFile = tempFolder.newFile("target.csv").apply { writeText("original content") }
+        val tempFile = tempFolder.newFile("target.csv.tmp").apply { writeText("new completed content") }
+
+        safeAtomicReplace(tempFile, destFile)
+
+        assertEquals("new completed content", destFile.readText())
+        assertFalse(tempFile.exists())
+    }
 }

@@ -364,3 +364,36 @@ fun <T> deduplicateList(items: List<T>): List<T> {
 fun extractNumbers(fileName: String): List<String> {
     return Regex("""\d+""").findAll(fileName).map { it.value }.toList()
 }
+
+/**
+ * Atomically or safely replaces destFile with tempFile.
+ * If destFile exists, it is replaced only when tempFile is completely written.
+ */
+fun safeAtomicReplace(tempFile: File, destFile: File) {
+    if (!tempFile.exists()) return
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        try {
+            java.nio.file.Files.move(
+                tempFile.toPath(),
+                destFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE
+            )
+            return
+        } catch (_: Exception) {
+            try {
+                java.nio.file.Files.move(
+                    tempFile.toPath(),
+                    destFile.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+                return
+            } catch (_: Exception) {}
+        }
+    }
+    if (destFile.exists()) {
+        destFile.delete()
+    }
+    tempFile.renameTo(destFile)
+}
+

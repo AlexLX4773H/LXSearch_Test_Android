@@ -107,4 +107,21 @@ class LXJobManagerTest {
         val v2Route = com.example.lxsearch.CreateFileListRoute(initialIsV2 = true)
         assertEquals(true, v2Route.initialIsV2)
     }
+
+    @Test
+    fun testJobCancellation() {
+        val job = LXJob.CreateFileList(isV2 = true)
+        LXJobManager.startJobStateForTesting(job)
+        assertTrue(LXJobManager.isJobRunning())
+        assertFalse(LXJobManager.isCancelled)
+
+        LXJobManager.cancelJobForTesting()
+        val state = LXJobManager.jobState.value
+        assertTrue(state is JobState.Cancelled)
+        val cancelled = state as JobState.Cancelled
+        assertEquals(job, cancelled.job)
+        assertTrue(LXJobManager.isCancelled)
+        assertFalse(LXJobManager.isJobRunning())
+        assertTrue(LXJobManager.recentLogs.value.any { it.contains("aborted by user") })
+    }
 }

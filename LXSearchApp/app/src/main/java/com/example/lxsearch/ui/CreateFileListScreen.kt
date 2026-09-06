@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -41,15 +42,19 @@ fun CreateFileListScreen(
 
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
     val completedJob = (jobState as? com.example.lxsearch.service.JobState.Completed)?.job
+    val cancelledJob = (jobState as? com.example.lxsearch.service.JobState.Cancelled)?.job
 
     var isV2 by remember {
         mutableStateOf(
             initialIsV2
                 ?: (currentJob as? com.example.lxsearch.service.LXJob.CreateFileList)?.isV2
                 ?: (completedJob as? com.example.lxsearch.service.LXJob.CreateFileList)?.isV2
+                ?: (cancelledJob as? com.example.lxsearch.service.LXJob.CreateFileList)?.isV2
                 ?: false
         )
     }
+
+    var showCancelDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialIsV2) {
         if (initialIsV2 != null) {
@@ -65,9 +70,10 @@ fun CreateFileListScreen(
 
     val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.CreateFileList && currentJob.isV2 == isV2
     val isThisJobCompleted = completedJob is com.example.lxsearch.service.LXJob.CreateFileList && completedJob.isV2 == isV2
+    val isThisJobCancelled = cancelledJob is com.example.lxsearch.service.LXJob.CreateFileList && cancelledJob.isV2 == isV2
     val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
 
-    val logLines = if (isThisJobRunning || isThisJobCompleted) allLogs else emptyList()
+    val logLines = if (isThisJobRunning || isThisJobCompleted || isThisJobCancelled) allLogs else emptyList()
 
     val completedCount = if (isThisJobCompleted) {
         (jobState as? com.example.lxsearch.service.JobState.Completed)?.resultData as? Int
@@ -207,30 +213,99 @@ fun CreateFileListScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        // Run Button
-        Button(
-            onClick = {
-                com.example.lxsearch.service.LXJobManager.startJob(
-                    context,
-                    com.example.lxsearch.service.LXJob.CreateFileList(isV2)
-                )
-            },
-            enabled = !isAnyJobRunning,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Primary),
-        ) {
-            if (isThisJobRunning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = OnPrimary,
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("Running in background...", color = OnPrimary)
-            } else {
+        // Run / Cancel Action Area
+        if (isThisJobRunning) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Primary.copy(alpha = 0.85f),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = OnPrimary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Running in background...",
+                            color = OnPrimary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { showCancelDialog = true },
+                    modifier = Modifier.height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Cancel",
+                        tint = MaterialTheme.colorScheme.onError,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Cancel",
+                        color = MaterialTheme.colorScheme.onError,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            Button(
+                onClick = {
+                    com.example.lxsearch.service.LXJobManager.startJob(
+                        context,
+                        com.example.lxsearch.service.LXJob.CreateFileList(isV2)
+                    )
+                },
+                enabled = !isAnyJobRunning,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+            ) {
                 Text("Run ${if (isV2) "V2" else "V1"} Scan", color = OnPrimary, fontWeight = FontWeight.SemiBold)
             }
+        }
+
+        if (showCancelDialog) {
+            AlertDialog(
+                onDismissRequest = { showCancelDialog = false },
+                title = { Text("Abort ${if (isV2) "V2" else "V1"} Scan?") },
+                text = {
+                    Text("Are you sure you want to cancel the running job? Scanning will stop immediately and existing index files will be kept untouched.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showCancelDialog = false
+                            com.example.lxsearch.service.LXJobManager.cancelJob(context)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Abort Job", color = MaterialTheme.colorScheme.onError)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCancelDialog = false }) {
+                        Text("Keep Running")
+                    }
+                }
+            )
         }
 
         // Result count
