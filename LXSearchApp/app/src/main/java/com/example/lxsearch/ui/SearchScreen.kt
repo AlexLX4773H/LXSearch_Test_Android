@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -120,21 +121,64 @@ fun SearchScreen(
             leadingIcon = { Icon(Icons.Default.Search, "Search", tint = OnSurfaceVariant) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                query = ""
+                                searchResults = null
+                                showHelp = true
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "Clear",
+                                tint = OnSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Button(
+                            onClick = {
+                                showHelp = false
+                                scope.launch {
+                                    searchResults = withContext(Dispatchers.IO) {
+                                        searchEngine.search(query)
+                                    }
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        ) {
+                            Text("Go", color = OnPrimary, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                } else {
                     Button(
                         onClick = {
-                            showHelp = false
-                            scope.launch {
-                                searchResults = withContext(Dispatchers.IO) {
-                                    searchEngine.search(query)
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                            val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()
+                            if (!clipText.isNullOrBlank()) {
+                                val trimmed = clipText.trim()
+                                query = trimmed
+                                showHelp = false
+                                scope.launch {
+                                    searchResults = withContext(Dispatchers.IO) {
+                                        searchEngine.search(trimmed)
+                                    }
                                 }
                             }
                         },
                         modifier = Modifier.padding(end = 4.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Primary),
                     ) {
-                        Text("Go", color = OnPrimary, fontWeight = FontWeight.SemiBold)
+                        Text("Paste & Go", color = OnPrimary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                     }
                 }
             },
