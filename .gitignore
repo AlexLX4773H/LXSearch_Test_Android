@@ -5,3 +5,6 @@ output/
 *.csv
 *.xlsx
 *.pkl
+
+# Output folder
+LXSearch_Data/

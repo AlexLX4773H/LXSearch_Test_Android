@@ -7,3 +7,6 @@ read\s*the\s*chapter$
 [\s\d]+$
 [\s\d-]*volume[\s\d]*$
 oneshot
+.*[\s_]*_chapter$
+.*[\s_]*_chapter_[a-f0-9]{6,}$
+[\s\d-]*chapter_[a-f0-9]{6,}$
