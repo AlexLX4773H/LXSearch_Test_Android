@@ -43,7 +43,8 @@ object CreateFileListV1 {
         finalList.add(LIST_CSV_HEADERS)
 
         // Scan directories for folders
-        for (rootDir in READ_ROOT_DIR_FOR_FOLDERS) {
+        val dirsToScan = resolveReadDirectories(READ_ROOT_DIR_FOR_FOLDERS)
+        for (rootDir in dirsToScan) {
             val rootFile = File(rootDir)
             if (!rootFile.exists() || !rootFile.isDirectory) continue
 

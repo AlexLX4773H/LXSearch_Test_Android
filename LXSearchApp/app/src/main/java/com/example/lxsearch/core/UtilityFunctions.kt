@@ -1,5 +1,7 @@
 package com.example.lxsearch.core
 
+import java.io.File
+
 /**
  * Direct port of shared utility functions and constants from the Python scripts.
  * Preserves all regex patterns, CSV delimiters, bracket extraction logic, etc.
@@ -42,20 +44,70 @@ val V2_LIST_CSV_HEADERS = LIST_CSV_HEADERS + V2_LIST_SUMMARY + V2_LIST + V2_END_
 val V2_VALID_EXT = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp")
 
 // Directory paths
-val READ_ROOT_DIR_FOR_FOLDERS = listOf(
-    "/storage/emulated/0/Vere2/TempD",
-    "/storage/emulated/0/Vere2/TempT",
-    "/storage/emulated/0/Vere2/Vere/NewFolder",
+const val MIHON_DOWNLOADS_DIR = "/storage/emulated/0/Vere2/Vere/Mihon/downloads"
+
+val DEFAULT_MIHON_HENTAI_FOLDERS = listOf(
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NineHentai (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NHentai (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/nHentai.com (unoriginal) (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/E-Hentai (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/Hennojin (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/HentaiHand (ALL)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/HentaiHand (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/AsmHentai (EN)",
     "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NHentai.xxx (EN)"
 )
+
+val BASE_READ_ROOT_DIR_FOR_FOLDERS = listOf(
+    "/storage/emulated/0/Vere2/TempD",
+    "/storage/emulated/0/Vere2/TempT",
+    "/storage/emulated/0/Vere2/Vere/NewFolder"
+)
+
+/**
+ * Checks whether a given directory path points to the Mihon downloads folder.
+ * Matches with or without leading/trailing slashes, and case-insensitively.
+ */
+fun isMihonDownloadsDir(path: String): Boolean {
+    val normalized = path.trim().trimEnd('/', '\\')
+    return normalized.equals("/storage/emulated/0/Vere2/Vere/Mihon/downloads", ignoreCase = true) ||
+           normalized.equals("storage/emulated/0/Vere2/Vere/Mihon/downloads", ignoreCase = true)
+}
+
+/**
+ * Returns all subdirectories within Mihon downloads whose names contain "Hentai" (case-insensitive).
+ * If baseDir exists on the filesystem, it queries and sorts all matching subdirectories.
+ * Otherwise, falls back to DEFAULT_MIHON_HENTAI_FOLDERS.
+ */
+fun getMihonHentaiFolders(baseDir: String = MIHON_DOWNLOADS_DIR): List<String> {
+    val dir = File(baseDir.trimEnd('/', '\\'))
+    if (dir.exists() && dir.isDirectory) {
+        val matchingFolders = dir.listFiles { file ->
+            file.isDirectory && file.name.contains("Hentai", ignoreCase = true)
+        }?.map { it.absolutePath }?.sorted()
+
+        return matchingFolders ?: emptyList()
+    }
+    return DEFAULT_MIHON_HENTAI_FOLDERS
+}
+
+/**
+ * Resolves a list of directory paths. Any path pointing to the Mihon downloads folder
+ * is expanded into all subfolders whose names contain "Hentai".
+ */
+fun resolveReadDirectories(directories: List<String>): List<String> {
+    val result = mutableListOf<String>()
+    for (dir in directories) {
+        if (isMihonDownloadsDir(dir)) {
+            result.addAll(getMihonHentaiFolders(dir))
+        } else {
+            result.add(dir)
+        }
+    }
+    return result
+}
+
+val READ_ROOT_DIR_FOR_FOLDERS: List<String>
+    get() = BASE_READ_ROOT_DIR_FOR_FOLDERS + getMihonHentaiFolders()
 
 val READ_ROOT_DIR_FOR_FILES = listOf(
     "/storage/emulated/0/Vere2/TempT",
@@ -84,19 +136,14 @@ val CANDIDATE_DESTINATIONS = listOf(
     "/storage/emulated/0/Vere2/Vere/NewFolder/Vere2"
 )
 
-val CANDIDATE_SOURCES = listOf(
+val BASE_CANDIDATE_SOURCES = listOf(
     "/storage/emulated/0/Vere2/Vere/NewFolder/Vere2/000 new",
-    "/storage/emulated/0/Vere2/Vere/NewFolder/Vere2/000 S",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NineHentai (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NHentai (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/nHentai.com (unoriginal) (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/E-Hentai (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/Hennojin (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/HentaiHand (ALL)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/HentaiHand (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/AsmHentai (EN)",
-    "/storage/emulated/0/Vere2/Vere/Mihon/downloads/NHentai.xxx (EN)"
+    "/storage/emulated/0/Vere2/Vere/NewFolder/Vere2/000 S"
 )
+
+val CANDIDATE_SOURCES: List<String>
+    get() = BASE_CANDIDATE_SOURCES + getMihonHentaiFolders()
+
 
 // Name-Circle relation paths
 val DEFAULT_ROOT_DIRS = listOf(

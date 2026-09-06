@@ -328,7 +328,8 @@ object MoveFromSource {
     fun scan(outputDir: File, inputDir: File): ScanResult {
         val logs = mutableListOf<String>()
         val destDir = CANDIDATE_DESTINATIONS.firstOrNull { File(it).exists() } ?: CANDIDATE_DESTINATIONS.first()
-        val sourceDirs = CANDIDATE_SOURCES.filter { File(it).exists() }.ifEmpty { CANDIDATE_SOURCES }
+        val candidateSources = resolveReadDirectories(CANDIDATE_SOURCES)
+        val sourceDirs = candidateSources.filter { File(it).exists() }.ifEmpty { candidateSources }
 
         logs.add("Destination: $destDir")
         logs.add("Sources to scan (${sourceDirs.size}):")
