@@ -26,11 +26,11 @@ class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* permissions handled */ }
+    ) { copyAssetsIfNeeded() }
 
     private val manageStorageLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* result handled */ }
+    ) { copyAssetsIfNeeded() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +52,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        copyAssetsIfNeeded()
     }
 
     private fun requestStoragePermissions() {
@@ -84,9 +89,10 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Copies bundled input text files from assets (or fallback defaults) to app's
-     * external files directory on first launch (or if files are missing).
+     * data directory on first launch (or if files are missing).
      */
     private fun copyAssetsIfNeeded() {
+        InputFileManager.migrateLegacyFilesIfNeeded(this)
         val inputDir = InputFileManager.getInputDir(this)
 
         for (fileInfo in InputFileManager.MANAGED_FILES) {
@@ -97,7 +103,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Also ensure output directory exists
-        val outputDir = File(getExternalFilesDir(null), "output")
+        val outputDir = getOutputDir(this)
         if (!outputDir.exists()) outputDir.mkdirs()
     }
 
@@ -109,9 +115,7 @@ class MainActivity : ComponentActivity() {
 
         /** Gets the output directory path for the app. */
         fun getOutputDir(context: Context): File {
-            val dir = File(context.getExternalFilesDir(null), "output")
-            if (!dir.exists()) dir.mkdirs()
-            return dir
+            return InputFileManager.getOutputDir(context)
         }
     }
 }

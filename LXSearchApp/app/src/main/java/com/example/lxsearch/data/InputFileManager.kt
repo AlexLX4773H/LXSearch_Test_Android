@@ -1,12 +1,15 @@
 package com.example.lxsearch.data
 
 import android.content.Context
+import android.os.Environment
 import java.io.File
 
 /**
  * Metadata and helper operations for managing user-editable input/configuration files.
  */
 object InputFileManager {
+
+    const val APP_DIR_NAME = "LXSearch_Data"
 
     data class InputFileInfo(
         val fileName: String,
@@ -175,12 +178,72 @@ pt.
     )
 
     /**
-     * Resolves the app's input directory on external storage.
+     * Resolves the app's root data directory in public external storage (/storage/emulated/0/LXSearch_Data).
+     * Falls back to context.getExternalFilesDir(null) if external storage cannot be written.
+     */
+    fun getBaseDir(context: Context): File {
+        val publicDir = File(Environment.getExternalStorageDirectory(), APP_DIR_NAME)
+        return try {
+            if (!publicDir.exists()) {
+                publicDir.mkdirs()
+            }
+            if (publicDir.canWrite()) {
+                publicDir
+            } else {
+                context.getExternalFilesDir(null) ?: publicDir
+            }
+        } catch (e: Exception) {
+            context.getExternalFilesDir(null) ?: publicDir
+        }
+    }
+
+    /**
+     * Resolves the app's input directory (/storage/emulated/0/LXSearch_Data/input).
      */
     fun getInputDir(context: Context): File {
-        val dir = File(context.getExternalFilesDir(null), "input")
+        val dir = File(getBaseDir(context), "input")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    /**
+     * Resolves the app's output directory (/storage/emulated/0/LXSearch_Data/output).
+     */
+    fun getOutputDir(context: Context): File {
+        val dir = File(getBaseDir(context), "output")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /**
+     * Migrates files from legacy app-specific directory (/Android/data/com.example.lxsearch/files)
+     * to the new public directory (/storage/emulated/0/LXSearch_Data) if present.
+     */
+    fun migrateLegacyFilesIfNeeded(context: Context) {
+        try {
+            val legacyRoot = context.getExternalFilesDir(null) ?: return
+            val targetBase = File(Environment.getExternalStorageDirectory(), APP_DIR_NAME)
+            if (!targetBase.exists() && !targetBase.mkdirs()) return
+
+            for (subDirName in listOf("input", "output")) {
+                val legacySubDir = File(legacyRoot, subDirName)
+                if (legacySubDir.exists() && legacySubDir.isDirectory) {
+                    val targetSubDir = File(targetBase, subDirName)
+                    if (!targetSubDir.exists()) targetSubDir.mkdirs()
+
+                    legacySubDir.listFiles()?.forEach { file ->
+                        if (file.isFile) {
+                            val dest = File(targetSubDir, file.name)
+                            if (!dest.exists()) {
+                                file.copyTo(dest, overwrite = false)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     /**
