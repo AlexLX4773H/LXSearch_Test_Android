@@ -1,5 +1,6 @@
 package com.example.lxsearch.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,7 +28,7 @@ fun MoveToTempScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
-    val recentLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
+    val allLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
     var scanResult by remember { mutableStateOf<MoveToTemp.ScanResult?>(null) }
     var showMoveDialog by remember { mutableStateOf(false) }
@@ -35,10 +36,16 @@ fun MoveToTempScreen(
     var phase by remember { mutableStateOf("idle") } // idle, scanned, moved, removed
 
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val completedState = jobState as? com.example.lxsearch.service.JobState.Completed
     val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
     val isScanningJob = currentJob is com.example.lxsearch.service.LXJob.MoveToTempScan
     val isExecutingJob = currentJob is com.example.lxsearch.service.LXJob.MoveToTempMove ||
             currentJob is com.example.lxsearch.service.LXJob.MoveToTempRemove
+    val isThisJobRunning = isScanningJob || isExecutingJob
+    val isThisJobCompleted = completedState?.job is com.example.lxsearch.service.LXJob.MoveToTempScan ||
+            completedState?.job is com.example.lxsearch.service.LXJob.MoveToTempMove ||
+            completedState?.job is com.example.lxsearch.service.LXJob.MoveToTempRemove
+    val recentLogs = if (isThisJobRunning || isThisJobCompleted) allLogs else emptyList()
 
     LaunchedEffect(jobState) {
         val completed = jobState as? com.example.lxsearch.service.JobState.Completed
@@ -170,7 +177,25 @@ fun MoveToTempScreen(
 
             // Execution logs
             if (recentLogs.isNotEmpty() && (phase == "moved" || phase == "removed" || isExecutingJob)) {
-                Text("Execution Log", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Execution Log", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
+                    if (recentLogs.isNotEmpty() && !isAnyJobRunning) {
+                        Text(
+                            "Clear",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Primary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                com.example.lxsearch.service.LXJobManager.clearLogs()
+                                com.example.lxsearch.service.LXJobManager.resetToIdle()
+                            }
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),

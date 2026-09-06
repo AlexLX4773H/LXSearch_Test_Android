@@ -1,6 +1,7 @@
 package com.example.lxsearch.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,15 +34,19 @@ fun NameCircleScreen(
 ) {
     val context = LocalContext.current
     val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
-    val logLines by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
+    val allLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
+    val completedState = jobState as? com.example.lxsearch.service.JobState.Completed
     val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.NameCircle
+    val isThisJobCompleted = completedState?.job is com.example.lxsearch.service.LXJob.NameCircle
     val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
 
-    val result = (jobState as? com.example.lxsearch.service.JobState.Completed)?.let {
-        if (it.job is com.example.lxsearch.service.LXJob.NameCircle) it.resultData as? NameCircleRelation.Result else null
-    }
+    val logLines = if (isThisJobRunning || isThisJobCompleted) allLogs else emptyList()
+
+    val result = if (isThisJobCompleted) {
+        completedState.resultData as? NameCircleRelation.Result
+    } else null
 
     var lastRunTimestamp by remember { mutableStateOf<String?>(null) }
 
@@ -192,12 +197,29 @@ fun NameCircleScreen(
         Spacer(Modifier.height(12.dp))
 
         // Log output
-        Text(
-            "Log Output",
-            style = MaterialTheme.typography.labelMedium,
-            color = OnSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Log Output",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnSurfaceVariant,
+            )
+            if (logLines.isNotEmpty() && !isAnyJobRunning) {
+                Text(
+                    "Clear",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable {
+                        com.example.lxsearch.service.LXJobManager.clearLogs()
+                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                    }
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
 
         Card(

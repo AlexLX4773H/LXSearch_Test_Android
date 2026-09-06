@@ -1,6 +1,7 @@
 package com.example.lxsearch.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,17 +36,22 @@ fun CreateFileListScreen(
 ) {
     val context = LocalContext.current
     val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
-    val logLines by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
+    val allLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
     var isV2 by remember { mutableStateOf(false) }
 
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
-    val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.CreateFileList
+    val completedJob = (jobState as? com.example.lxsearch.service.JobState.Completed)?.job
+
+    val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.CreateFileList && currentJob.isV2 == isV2
+    val isThisJobCompleted = completedJob is com.example.lxsearch.service.LXJob.CreateFileList && completedJob.isV2 == isV2
     val isAnyJobRunning = jobState is com.example.lxsearch.service.JobState.Running
 
-    val completedCount = (jobState as? com.example.lxsearch.service.JobState.Completed)?.let {
-        if (it.job is com.example.lxsearch.service.LXJob.CreateFileList) it.resultData as? Int else null
-    }
+    val logLines = if (isThisJobRunning || isThisJobCompleted) allLogs else emptyList()
+
+    val completedCount = if (isThisJobCompleted) {
+        (jobState as? com.example.lxsearch.service.JobState.Completed)?.resultData as? Int
+    } else null
 
     var lastRunTimestamp by remember { mutableStateOf<String?>(null) }
 
@@ -87,7 +93,13 @@ fun CreateFileListScreen(
         ) {
             FilterChip(
                 selected = !isV2,
-                onClick = { if (!isAnyJobRunning) isV2 = false },
+                onClick = {
+                    if (!isAnyJobRunning && isV2) {
+                        isV2 = false
+                        com.example.lxsearch.service.LXJobManager.clearLogs()
+                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                    }
+                },
                 label = { Text("V1 — Basic") },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = PrimaryContainer,
@@ -97,7 +109,13 @@ fun CreateFileListScreen(
             Spacer(Modifier.width(12.dp))
             FilterChip(
                 selected = isV2,
-                onClick = { if (!isAnyJobRunning) isV2 = true },
+                onClick = {
+                    if (!isAnyJobRunning && !isV2) {
+                        isV2 = true
+                        com.example.lxsearch.service.LXJobManager.clearLogs()
+                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                    }
+                },
                 label = { Text("V2 — Enhanced") },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = PrimaryContainer,
@@ -216,12 +234,29 @@ fun CreateFileListScreen(
         Spacer(Modifier.height(12.dp))
 
         // Log output
-        Text(
-            "Log Output",
-            style = MaterialTheme.typography.labelMedium,
-            color = OnSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Log Output",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnSurfaceVariant,
+            )
+            if (logLines.isNotEmpty() && !isAnyJobRunning) {
+                Text(
+                    "Clear",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable {
+                        com.example.lxsearch.service.LXJobManager.clearLogs()
+                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                    }
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
 
         Card(
