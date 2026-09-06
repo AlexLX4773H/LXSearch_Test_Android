@@ -32,16 +32,36 @@ import kotlinx.coroutines.withContext
 fun CreateFileListScreen(
     onBack: () -> Unit,
     onNavigateToInputFiles: ((String) -> Unit)? = null,
+    initialIsV2: Boolean? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val jobState by com.example.lxsearch.service.LXJobManager.jobState.collectAsState()
     val allLogs by com.example.lxsearch.service.LXJobManager.recentLogs.collectAsState()
 
-    var isV2 by remember { mutableStateOf(false) }
-
     val currentJob = (jobState as? com.example.lxsearch.service.JobState.Running)?.job
     val completedJob = (jobState as? com.example.lxsearch.service.JobState.Completed)?.job
+
+    var isV2 by remember {
+        mutableStateOf(
+            initialIsV2
+                ?: (currentJob as? com.example.lxsearch.service.LXJob.CreateFileList)?.isV2
+                ?: (completedJob as? com.example.lxsearch.service.LXJob.CreateFileList)?.isV2
+                ?: false
+        )
+    }
+
+    LaunchedEffect(initialIsV2) {
+        if (initialIsV2 != null) {
+            isV2 = initialIsV2
+        }
+    }
+
+    LaunchedEffect(currentJob) {
+        if (currentJob is com.example.lxsearch.service.LXJob.CreateFileList) {
+            isV2 = currentJob.isV2
+        }
+    }
 
     val isThisJobRunning = currentJob is com.example.lxsearch.service.LXJob.CreateFileList && currentJob.isV2 == isV2
     val isThisJobCompleted = completedJob is com.example.lxsearch.service.LXJob.CreateFileList && completedJob.isV2 == isV2
@@ -94,10 +114,12 @@ fun CreateFileListScreen(
             FilterChip(
                 selected = !isV2,
                 onClick = {
-                    if (!isAnyJobRunning && isV2) {
+                    if (isV2) {
                         isV2 = false
-                        com.example.lxsearch.service.LXJobManager.clearLogs()
-                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                        if (!isAnyJobRunning) {
+                            com.example.lxsearch.service.LXJobManager.clearLogs()
+                            com.example.lxsearch.service.LXJobManager.resetToIdle()
+                        }
                     }
                 },
                 label = { Text("V1 — Basic") },
@@ -110,10 +132,12 @@ fun CreateFileListScreen(
             FilterChip(
                 selected = isV2,
                 onClick = {
-                    if (!isAnyJobRunning && !isV2) {
+                    if (!isV2) {
                         isV2 = true
-                        com.example.lxsearch.service.LXJobManager.clearLogs()
-                        com.example.lxsearch.service.LXJobManager.resetToIdle()
+                        if (!isAnyJobRunning) {
+                            com.example.lxsearch.service.LXJobManager.clearLogs()
+                            com.example.lxsearch.service.LXJobManager.resetToIdle()
+                        }
                     }
                 },
                 label = { Text("V2 — Enhanced") },
@@ -264,10 +288,16 @@ fun CreateFileListScreen(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = Background),
         ) {
+            val scrollState = rememberScrollState()
+            LaunchedEffect(logLines.size) {
+                if (logLines.isNotEmpty()) {
+                    scrollState.animateScrollTo(scrollState.maxValue)
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(12.dp),
             ) {
                 for (line in logLines) {

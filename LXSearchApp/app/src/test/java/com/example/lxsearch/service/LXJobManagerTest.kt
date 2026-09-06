@@ -90,4 +90,21 @@ class LXJobManagerTest {
         assertEquals(JobState.Idle, LXJobManager.jobState.value)
         assertFalse(LXJobManager.isJobRunning())
     }
+
+    @Test
+    fun testCreateFileListJobAndRoute() {
+        val v1Job = LXJob.CreateFileList(isV2 = false)
+        assertEquals("Create File List (V1)", v1Job.title)
+        assertFalse(v1Job.isV2)
+
+        val v2Job = LXJob.CreateFileList(isV2 = true)
+        assertEquals("Create File List (V2)", v2Job.title)
+        assertTrue(v2Job.isV2)
+
+        val defaultRoute = com.example.lxsearch.CreateFileListRoute()
+        assertNull(defaultRoute.initialIsV2)
+
+        val v2Route = com.example.lxsearch.CreateFileListRoute(initialIsV2 = true)
+        assertEquals(true, v2Route.initialIsV2)
+    }
 }

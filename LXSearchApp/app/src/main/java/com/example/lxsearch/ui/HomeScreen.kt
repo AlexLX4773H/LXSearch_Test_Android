@@ -53,7 +53,7 @@ fun HomeScreen(
             Card(
                 onClick = {
                     when (runningJob.job) {
-                        is LXJob.CreateFileList -> onNavigate(CreateFileListRoute)
+                        is LXJob.CreateFileList -> onNavigate(CreateFileListRoute(runningJob.job.isV2))
                         is LXJob.NameCircle -> onNavigate(NameCircleRoute)
                         is LXJob.MoveToTempScan,
                         is LXJob.MoveToTempMove,
@@ -114,7 +114,7 @@ fun HomeScreen(
             title = "Create File List",
             description = "Scan folders and files, extract bracket metadata, and parse ComicInfo (V1 / V2)",
             accentColor = Primary,
-            onClick = { onNavigate(CreateFileListRoute) }
+            onClick = { onNavigate(CreateFileListRoute()) }
         )
         Spacer(Modifier.height(12.dp))
 
