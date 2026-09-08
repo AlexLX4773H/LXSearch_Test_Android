@@ -114,6 +114,14 @@ val READ_ROOT_DIR_FOR_FILES = listOf(
     "/storage/emulated/0/Vere2/Vere/NewFolder/Files"
 )
 
+// SMB Configuration
+const val SMB_SHARE_PATH = """\\192.168.88.234\Share2sgb"""
+const val SMB_USERNAME = "alex"
+const val SMB_PASSWORD = "aaaaaaaa"
+val SMB_READ_ROOT_DIR_FOR_FOLDERS = listOf(
+    """\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived"""
+)
+
 // Move_To_Temp paths
 const val MOVE_LIST_SOURCE = "/storage/emulated/0/Vere2/Vere/NewFolder/Vere2"
 const val MOVE_LIST_DEST = "/storage/emulated/0/Vere2/TempD"

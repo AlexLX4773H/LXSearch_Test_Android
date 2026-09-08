@@ -83,4 +83,7 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // SMB client
+  implementation("com.hierynomus:smbj:0.13.0")
 }

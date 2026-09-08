@@ -44,7 +44,8 @@ class CreateFileListTest {
             outputDir = outputDir,
             inputDir = inputDir,
             foldersDirs = listOf(foldersDir.absolutePath),
-            filesDirs = listOf(filesDir.absolutePath)
+            filesDirs = listOf(filesDir.absolutePath),
+            smbFoldersDirs = emptyList()
         )
 
         // Only Test Folder and Standalone Book should be included
@@ -109,7 +110,8 @@ class CreateFileListTest {
             outputDir = outputDir,
             inputDir = inputDir,
             foldersDirs = listOf(foldersDir.absolutePath),
-            filesDirs = listOf(filesDir.absolutePath)
+            filesDirs = listOf(filesDir.absolutePath),
+            smbFoldersDirs = emptyList()
         )
 
         assertEquals(2, count)
@@ -145,4 +147,87 @@ class CreateFileListTest {
         assertFalse(lines.any { it.contains("Chapter 03") })
         assertFalse(lines.any { it.contains("oneshot") })
     }
+
+    @Test
+    fun testCreateFileListV1WithSmbScan() {
+        val root = tempFolder.newFolder("v1_smb_test")
+        val outputDir = File(root, "output")
+        val inputDir = File(root, "input").apply { mkdirs() }
+
+        val count = CreateFileListV1.run(
+            outputDir = outputDir,
+            inputDir = inputDir,
+            foldersDirs = emptyList(),
+            filesDirs = emptyList(),
+            smbFoldersDirs = SMB_READ_ROOT_DIR_FOR_FOLDERS,
+            smbSharePath = SMB_SHARE_PATH,
+            smbUsername = SMB_USERNAME,
+            smbPassword = SMB_PASSWORD
+        )
+
+        assertEquals(1, count)
+        val csvFile = File(outputDir, "filename_list.csv")
+        assertTrue(csvFile.exists())
+        val lines = csvFile.readLines(Charsets.UTF_8)
+        assertEquals(2, lines.size)
+        val row = lines[1].split(LIST_CSV_DELIMITER)
+        assertEquals("Test11", row[0])
+        assertEquals("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", row[1])
+
+        val listFile = File(outputDir, "list.txt")
+        assertTrue(listFile.exists())
+        val listContent = listFile.readText(Charsets.UTF_8).trim()
+        assertEquals("""test11 ::: \\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", listContent)
+    }
+
+    @Test
+    fun testCreateFileListV2WithSmbScan() {
+        val root = tempFolder.newFolder("v2_smb_test")
+        val outputDir = File(root, "output")
+        val inputDir = File(root, "input").apply { mkdirs() }
+
+        val count = CreateFileListV2.run(
+            outputDir = outputDir,
+            inputDir = inputDir,
+            foldersDirs = emptyList(),
+            filesDirs = emptyList(),
+            smbFoldersDirs = SMB_READ_ROOT_DIR_FOR_FOLDERS,
+            smbSharePath = SMB_SHARE_PATH,
+            smbUsername = SMB_USERNAME,
+            smbPassword = SMB_PASSWORD
+        )
+
+        assertEquals(1, count)
+        val csvFile = File(outputDir, "filename_list_v2.csv")
+        assertTrue(csvFile.exists())
+        val lines = csvFile.readLines(Charsets.UTF_8)
+        assertEquals(2, lines.size)
+        val row = lines[1].split(LIST_CSV_DELIMITER)
+        assertEquals(25, row.size)
+        assertEquals("Test11", row[0])
+        assertEquals("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", row[1])
+    }
+
+    @Test
+    fun testCreateFileListV1WithUnreachableSmbDoesNotFail() {
+        val root = tempFolder.newFolder("v1_unreachable_test")
+        val outputDir = File(root, "output")
+        val inputDir = File(root, "input").apply { mkdirs() }
+
+        val count = CreateFileListV1.run(
+            outputDir = outputDir,
+            inputDir = inputDir,
+            foldersDirs = emptyList(),
+            filesDirs = emptyList(),
+            smbFoldersDirs = listOf("""\\192.168.88.239\Share2sgb\Archived"""),
+            smbSharePath = """\\192.168.88.239\Share2sgb""",
+            smbUsername = "alex",
+            smbPassword = "aaaaaaaa"
+        )
+
+        assertEquals(0, count)
+        val csvFile = File(outputDir, "filename_list.csv")
+        assertTrue(csvFile.exists())
+    }
 }
+

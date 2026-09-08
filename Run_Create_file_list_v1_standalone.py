@@ -2,6 +2,7 @@ import glob
 import os
 import re
 import csv
+import socket
 
 # ── Regex patterns (from Utility_functions.py) ──────────────────────────────
 pattern_square = r"(\[([^\]]+)\])"
@@ -30,6 +31,14 @@ read_root_dir_for_folders = [
 
 read_root_dir_for_files = ['/storage/emulated/0/Vere2/TempT',
 '/storage/emulated/0/Vere2/Vere/NewFolder/Files']
+
+# ── SMB Configuration ────────────────────────────────────────────────────────
+SHARE_PATH = r"\\192.168.88.234\Share2sgb"
+USERNAME = "alex"
+PASSWORD = "aaaaaaaa"
+smb_read_root_dir_for_folders = [
+    r"\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived"
+]
 
 
 
@@ -95,6 +104,64 @@ def extract_brackets(string_to_check):
 
     return final_string, find_circle_list, find_curly_list, find_equal_list, left_author_list, right_tags_list, main_titles, main_titles_pressed, string_press(string_to_check)
 
+def extract_smb_host(path):
+    m = re.match(r'^[\\/]{2}([^\\/]+)', path)
+    return m.group(1) if m else None
+
+def is_smb_reachable(host, port=445, timeout=2.0):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, OSError):
+        return False
+
+def scan_smb_folders(locations, share_path, username, password):
+    if not locations:
+        return []
+    host = extract_smb_host(share_path) or extract_smb_host(locations[0])
+    if not host:
+        print("[SMB] No valid SMB host found in share path.")
+        return []
+
+    print(f"[SMB] Checking reachability of {host}...")
+    if not is_smb_reachable(host, timeout=2.0):
+        print(f"[SMB] Cannot reach SMB server at {host}. Skipping SMB scan.")
+        return []
+
+    print(f"[SMB] Server {host} is reachable. Connecting...")
+    use_smbclient = False
+    try:
+        import smbclient
+        smbclient.register_session(host, username=username, password=password)
+        use_smbclient = True
+    except Exception as e:
+        print(f"[SMB] smbclient session registration failed ({e}), falling back to standard os.walk")
+
+    found_folders = []
+    for loc in locations:
+        print(f"[SMB] Scanning folder: {loc}")
+        try:
+            if use_smbclient:
+                import smbclient
+                if not smbclient.path.exists(loc):
+                    print(f"[SMB] Path does not exist: {loc}")
+                    continue
+                for root, dirs, _ in smbclient.walk(loc):
+                    for d in dirs:
+                        found_folders.append(os.path.join(root, d))
+            else:
+                if not os.path.exists(loc):
+                    print(f"[SMB] Path does not exist: {loc}")
+                    continue
+                for root, dirs, _ in os.walk(loc):
+                    for d in dirs:
+                        found_folders.append(os.path.join(root, d))
+        except Exception as err:
+            print(f"[SMB] Error scanning {loc}: {err}")
+            continue
+
+    return found_folders
+
 # ── Main logic (from Run_Create_file_list.py) ────────────────────────────────
 
 count = 0
@@ -102,35 +169,50 @@ temp_string = ""
 final_list = [list_csv_headers]
 
 folder_name_input = "input"
-f = open(os.path.join(folder_name_input, "exclude_folders_chapter_re.txt"), "r", encoding="utf-8")
 exclude_chapter_re = []
-for line in f:
-    exclude_chapter_re.append(line.strip())
-f.close
+exclude_file_path = os.path.join(folder_name_input, "exclude_folders_chapter_re.txt")
+if os.path.exists(exclude_file_path):
+    with open(exclude_file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            exclude_chapter_re.append(line.strip())
 
 folder_name_output = "output"
 os.makedirs(folder_name_output, exist_ok=True)
 
+def process_folder(filename):
+    global count, temp_string
+    mystring = os.path.basename(filename)
+    mystring = mystring.lower().strip()
+    first = re.sub('[^A-Za-z0-9]+', '', mystring)
+    if check_re(first, exclude_chapter_re) or check_re(mystring, exclude_chapter_re):
+        return None
+    second = str(filename)
+    both = first + " ::: " + second + "\n"
+    temp_string += both
+    count += 1
+    print(first, ' - ', count)
+
+    mystring2 = os.path.basename(filename)
+    if mystring2.isspace() or len(mystring2) == 0:
+        return None
+    xyz = extract_brackets(mystring2)
+    final_xyz = [mystring2, second] + list(xyz)
+    return final_xyz
+
 for root_dir in read_root_dir_for_folders:
     for filename in glob.iglob(root_dir + f'**{os.sep}**', recursive=True):
         if os.path.isdir(filename):
-            mystring = os.path.basename(filename)
-            mystring = mystring.lower().strip()
-            first = re.sub('[^A-Za-z0-9]+', '', mystring)
-            if check_re(first, exclude_chapter_re) or check_re(mystring, exclude_chapter_re):
-                continue
-            second = str(filename)
-            both = first + " ::: " + second + "\n"
-            temp_string += both
-            count+=1
-            print(first, ' - ', count)
+            res = process_folder(filename)
+            if res:
+                final_list.append(res) #11 fields
 
-            mystring2 = os.path.basename(filename)
-            if mystring2.isspace() or len(mystring2) == 0:
-                continue
-            xyz = extract_brackets(mystring2)
-            final_xyz = [mystring2, second] + list(xyz)
-            final_list.append(final_xyz) #11 fields
+# ── Scan SMB directories for folders ─────────────────────────────────────────
+if smb_read_root_dir_for_folders:
+    smb_folders = scan_smb_folders(smb_read_root_dir_for_folders, SHARE_PATH, USERNAME, PASSWORD)
+    for filename in smb_folders:
+        res = process_folder(filename)
+        if res:
+            final_list.append(res) #11 fields
 
 for root_dir in read_root_dir_for_files:
     for filename in glob.iglob(root_dir + f'**{os.sep}**', recursive=True):

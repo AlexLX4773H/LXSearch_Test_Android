@@ -3,6 +3,7 @@ import os
 import re
 import csv
 import json
+import socket
 import xml.etree.ElementTree as ET
 
 # -------------------------------------------------------------------------
@@ -43,6 +44,14 @@ read_root_dir_for_folders = [
 
 read_root_dir_for_files = ['/storage/emulated/0/Vere2/TempT',
 '/storage/emulated/0/Vere2/Vere/NewFolder/Files']
+
+# ── SMB Configuration ────────────────────────────────────────────────────────
+SHARE_PATH = r"\\192.168.88.234\Share2sgb"
+USERNAME = "alex"
+PASSWORD = "aaaaaaaa"
+smb_read_root_dir_for_folders = [
+    r"\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived"
+]
 
 # -------------------------------------------------------------------------
 # Helper Functions (from Utility_functions.py)
@@ -292,6 +301,64 @@ def v2_get_files_size_and_count_avg(path):
 
     return convert_bytes_to_readable_size(total_size), count, convert_bytes_to_readable_size(avg)
 
+def extract_smb_host(path):
+    m = re.match(r'^[\\/]{2}([^\\/]+)', path)
+    return m.group(1) if m else None
+
+def is_smb_reachable(host, port=445, timeout=2.0):
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, OSError):
+        return False
+
+def scan_smb_folders(locations, share_path, username, password):
+    if not locations:
+        return []
+    host = extract_smb_host(share_path) or extract_smb_host(locations[0])
+    if not host:
+        print("[SMB] No valid SMB host found in share path.")
+        return []
+
+    print(f"[SMB] Checking reachability of {host}...")
+    if not is_smb_reachable(host, timeout=2.0):
+        print(f"[SMB] Cannot reach SMB server at {host}. Skipping SMB scan.")
+        return []
+
+    print(f"[SMB] Server {host} is reachable. Connecting...")
+    use_smbclient = False
+    try:
+        import smbclient
+        smbclient.register_session(host, username=username, password=password)
+        use_smbclient = True
+    except Exception as e:
+        print(f"[SMB] smbclient session registration failed ({e}), falling back to standard os.walk")
+
+    found_folders = []
+    for loc in locations:
+        print(f"[SMB] Scanning folder: {loc}")
+        try:
+            if use_smbclient:
+                import smbclient
+                if not smbclient.path.exists(loc):
+                    print(f"[SMB] Path does not exist: {loc}")
+                    continue
+                for root, dirs, _ in smbclient.walk(loc):
+                    for d in dirs:
+                        found_folders.append(os.path.join(root, d))
+            else:
+                if not os.path.exists(loc):
+                    print(f"[SMB] Path does not exist: {loc}")
+                    continue
+                for root, dirs, _ in os.walk(loc):
+                    for d in dirs:
+                        found_folders.append(os.path.join(root, d))
+        except Exception as err:
+            print(f"[SMB] Error scanning {loc}: {err}")
+            continue
+
+    return found_folders
+
 # -------------------------------------------------------------------------
 # Main Script
 # -------------------------------------------------------------------------
@@ -300,52 +367,74 @@ temp_string = ""
 final_list = [v2_list_csv_headers]
 
 folder_name_input = "input"
-f = open(os.path.join(folder_name_input, "exclude_folders_chapter_re.txt"), "r", encoding="utf-8")
 exclude_chapter_re = []
-for line in f:
-    exclude_chapter_re.append(line.strip())
-f.close
+exclude_file_path = os.path.join(folder_name_input, "exclude_folders_chapter_re.txt")
+if os.path.exists(exclude_file_path):
+    with open(exclude_file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            exclude_chapter_re.append(line.strip())
 
 folder_name_output = "output"
 os.makedirs(folder_name_output, exist_ok=True)
 
+def process_folder(filename):
+    global count, temp_string
+    mystring = os.path.basename(filename)
+    mystring = mystring.lower().strip()
+    first = re.sub('[^A-Za-z0-9]+', '', mystring)
+    if check_re(first, exclude_chapter_re) or check_re(mystring, exclude_chapter_re):
+        return None
+    second = str(filename)
+    both = first + " ::: " + second + "\n"
+    temp_string += both
+    count += 1
+    print(first, ' - ', count)
+
+    mystring2 = os.path.basename(filename)
+    if mystring2.isspace() or len(mystring2) == 0:
+        return None
+    xyz = extract_brackets(mystring2)
+    final_xyz = [mystring2, second] + list(xyz) #11 fields
+    
+    xml_file_path = v2_get_ComicInfo_xml_file(filename)
+    xml_items = [''] * 9
+    if xml_file_path:
+        try:
+            tree_root = ET.parse(xml_file_path).getroot()
+            xml_items = v2_get_items_xml(tree_root)
+        except Exception:
+            try:
+                xml_items = v2_parse_comic_info(xml_file_path)
+            except Exception:
+                xml_items = [''] * 9
+
+    if len(xml_items) != 9:
+        xml_items = (list(xml_items) + [''] * 9)[:9]
+
+    try:
+        item_count = len(os.listdir(filename))
+    except Exception:
+        item_count = 0
+    has_subdirs = v2_check_directory_exists(filename)
+    file_stats = list(v2_get_files_size_and_count_avg(filename))
+
+    final_xyz_v2 = final_xyz + xml_items + [item_count, has_subdirs] + file_stats #25 fields
+    return final_xyz_v2
+
 for root_dir in read_root_dir_for_folders:
     for filename in glob.iglob(root_dir + f'**{os.sep}**', recursive=True):
         if os.path.isdir(filename):
-            mystring = os.path.basename(filename)
-            mystring = mystring.lower().strip()
-            first = re.sub('[^A-Za-z0-9]+', '', mystring)
-            if check_re(first, exclude_chapter_re) or check_re(mystring, exclude_chapter_re):
-                continue
-            second = str(filename)
-            both = first + " ::: " + second + "\n"
-            temp_string += both
-            count+=1
-            print(first, ' - ', count)
+            res = process_folder(filename)
+            if res:
+                final_list.append(res) #25 fields
 
-            mystring2 = os.path.basename(filename)
-            if mystring2.isspace() or len(mystring2) == 0:
-                continue
-            xyz = extract_brackets(mystring2)
-            final_xyz = [mystring2, second] + list(xyz) #11 fields
-            
-            xml_file_path = v2_get_ComicInfo_xml_file(filename)
-            xml_items = [''] * 9
-            if xml_file_path:
-                try:
-                    tree_root = ET.parse(xml_file_path).getroot()
-                    xml_items = v2_get_items_xml(tree_root)
-                except Exception:
-                    try:
-                        xml_items = v2_parse_comic_info(xml_file_path)
-                    except Exception:
-                        xml_items = [''] * 9
-
-            if len(xml_items) != 9:
-                xml_items = (list(xml_items) + [''] * 9)[:9]
-
-            final_xyz_v2 = final_xyz + xml_items + [len(os.listdir(filename)), v2_check_directory_exists(filename)] + list(v2_get_files_size_and_count_avg(filename)) #25 fields
-            final_list.append(final_xyz_v2) #25 fields
+# ── Scan SMB directories for folders ─────────────────────────────────────────
+if smb_read_root_dir_for_folders:
+    smb_folders = scan_smb_folders(smb_read_root_dir_for_folders, SHARE_PATH, USERNAME, PASSWORD)
+    for filename in smb_folders:
+        res = process_folder(filename)
+        if res:
+            final_list.append(res) #25 fields
 
 
 for root_dir in read_root_dir_for_files:

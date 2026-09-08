@@ -25,6 +25,10 @@ object CreateFileListV1 {
         inputDir: File,
         foldersDirs: List<String> = READ_ROOT_DIR_FOR_FOLDERS,
         filesDirs: List<String> = READ_ROOT_DIR_FOR_FILES,
+        smbFoldersDirs: List<String> = SMB_READ_ROOT_DIR_FOR_FOLDERS,
+        smbSharePath: String = SMB_SHARE_PATH,
+        smbUsername: String = SMB_USERNAME,
+        smbPassword: String = SMB_PASSWORD,
         isCancelled: () -> Boolean = { false },
         onProgress: (Progress) -> Unit = {}
     ): Int {
@@ -83,6 +87,47 @@ object CreateFileListV1 {
                     )
                     finalList.add(row)
                 }
+            }
+        }
+
+        // Scan SMB directories for folders
+        if (smbFoldersDirs.isNotEmpty()) {
+            val smbFolders = SmbScanner.scanFolders(
+                locations = smbFoldersDirs,
+                sharePath = smbSharePath,
+                username = smbUsername,
+                password = smbPassword,
+                isCancelled = isCancelled
+            )
+            for (smbFolder in smbFolders) {
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V1) aborted by user")
+                val mystring = smbFolder.name.lowercase().trim()
+                val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
+
+                if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+
+                val second = smbFolder.uncPath
+                tempStringBuilder.append("$first ::: $second\n")
+                count++
+                onProgress(Progress(count, first))
+
+                val mystring2 = smbFolder.name
+                if (mystring2.isBlank()) continue
+
+                val result = extractBrackets(mystring2)
+                val row = listOf(
+                    mystring2, second,
+                    result.extractedName,
+                    result.circleList.toString(),
+                    result.curlyList.toString(),
+                    result.equalList.toString(),
+                    result.authorList.toString(),
+                    result.tagList.toString(),
+                    result.mainTitles.toString(),
+                    result.mainTitlesPressed.toString(),
+                    result.namePressed
+                )
+                finalList.add(row)
             }
         }
 

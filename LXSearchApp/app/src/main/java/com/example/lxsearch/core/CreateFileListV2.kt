@@ -216,6 +216,10 @@ object CreateFileListV2 {
         inputDir: File,
         foldersDirs: List<String> = READ_ROOT_DIR_FOR_FOLDERS,
         filesDirs: List<String> = READ_ROOT_DIR_FOR_FILES,
+        smbFoldersDirs: List<String> = SMB_READ_ROOT_DIR_FOR_FOLDERS,
+        smbSharePath: String = SMB_SHARE_PATH,
+        smbUsername: String = SMB_USERNAME,
+        smbPassword: String = SMB_PASSWORD,
         isCancelled: () -> Boolean = { false },
         onProgress: (Progress) -> Unit = {}
     ): Int {
@@ -297,6 +301,68 @@ object CreateFileListV2 {
                     ) // 25 fields total
                     finalList.add(fullRow)
                 }
+            }
+        }
+
+        // Scan SMB directories for folders
+        if (smbFoldersDirs.isNotEmpty()) {
+            val smbFolders = SmbScanner.scanFoldersWithDetails(
+                locations = smbFoldersDirs,
+                sharePath = smbSharePath,
+                username = smbUsername,
+                password = smbPassword,
+                isCancelled = isCancelled
+            )
+            for (smbFolder in smbFolders) {
+                if (isCancelled()) throw java.util.concurrent.CancellationException("Create File List (V2) aborted by user")
+                val mystring = smbFolder.name.lowercase().trim()
+                val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
+
+                if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+
+                val second = smbFolder.uncPath
+                tempStringBuilder.append("$first ::: $second\n")
+                count++
+                onProgress(Progress(count, first))
+
+                val mystring2 = smbFolder.name
+                if (mystring2.isBlank()) continue
+
+                val result = extractBrackets(mystring2)
+                val baseRow = listOf(
+                    mystring2, second,
+                    result.extractedName,
+                    result.circleList.toString(),
+                    result.curlyList.toString(),
+                    result.equalList.toString(),
+                    result.authorList.toString(),
+                    result.tagList.toString(),
+                    result.mainTitles.toString(),
+                    result.mainTitlesPressed.toString(),
+                    result.namePressed
+                ) // 11 fields
+
+                val xmlItems = if (smbFolder.xmlContent != null) {
+                    getItemsXml(smbFolder.xmlContent)
+                } else {
+                    List(9) { "" }
+                }
+
+                val totalSizeReadable = convertBytesToReadableSize(smbFolder.totalSizeBytes)
+                val avgSizeReadable = if (smbFolder.imageFilesCount > 0) {
+                    convertBytesToReadableSize(smbFolder.totalSizeBytes / smbFolder.imageFilesCount)
+                } else "0 B"
+
+                val endItems = listOf(
+                    smbFolder.itemCount.toString(),
+                    smbFolder.hasFolders.toString(),
+                    totalSizeReadable,
+                    smbFolder.imageFilesCount.toString(),
+                    avgSizeReadable
+                )
+
+                val fullRow = baseRow + xmlItems + endItems
+                finalList.add(fullRow)
             }
         }
 
