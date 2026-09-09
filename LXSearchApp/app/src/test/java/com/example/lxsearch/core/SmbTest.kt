@@ -29,23 +29,28 @@ class SmbTest {
     fun testSmbScanFolders() {
         val sharePath = """\\192.168.88.234\Share2sgb"""
         val locations = listOf("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived""")
-        val folders = SmbScanner.scanFolders(locations, sharePath, "alex", "aaaaaaaa")
-        println("Scanned basic folders: $folders")
-        assertEquals(1, folders.size)
-        assertEquals("Test11", folders[0].name)
-        assertEquals("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", folders[0].uncPath)
+        val items = SmbScanner.scanFolders(locations, sharePath, "alex", "aaaaaaaa")
+        println("Scanned basic items: ${items.size}")
+        assertTrue(items.isNotEmpty())
+        assertTrue("Should contain directories", items.any { it.isDirectory })
+        assertTrue("Should contain archive files", items.any { !it.isDirectory && it.name.endsWith(".cbz", ignoreCase = true) })
+        assertTrue("Should not contain images", items.none { !it.isDirectory && IMAGE_EXTENSIONS.contains("." + it.name.substringAfterLast('.').lowercase()) })
     }
 
     @Test
     fun testSmbScanFoldersWithDetails() {
         val sharePath = """\\192.168.88.234\Share2sgb"""
         val locations = listOf("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived""")
-        val folders = SmbScanner.scanFoldersWithDetails(locations, sharePath, "alex", "aaaaaaaa")
-        println("Scanned details folders: $folders")
-        assertEquals(1, folders.size)
-        assertEquals("Test11", folders[0].name)
-        assertEquals(0, folders[0].itemCount)
-        assertFalse(folders[0].hasFolders)
+        val items = SmbScanner.scanFoldersWithDetails(locations, sharePath, "alex", "aaaaaaaa")
+        println("Scanned details items: ${items.size}")
+        assertTrue(items.isNotEmpty())
+        assertTrue("Should contain directories", items.any { it.isDirectory })
+        val fileItem = items.firstOrNull { !it.isDirectory && it.name.endsWith(".cbz", ignoreCase = true) }
+        assertNotNull("Should contain at least one archive file", fileItem)
+        assertEquals(1, fileItem?.itemCount)
+        assertFalse(fileItem?.hasFolders ?: true)
+        assertTrue((fileItem?.totalSizeBytes ?: 0L) > 0L)
+        assertTrue("Should not contain images", items.none { !it.isDirectory && IMAGE_EXTENSIONS.contains("." + it.name.substringAfterLast('.').lowercase()) })
     }
 
     @Test

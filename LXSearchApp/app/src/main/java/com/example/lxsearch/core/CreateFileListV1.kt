@@ -90,7 +90,7 @@ object CreateFileListV1 {
             }
         }
 
-        // Scan SMB directories for folders
+        // Scan SMB directories for folders and archive files
         if (smbFoldersDirs.isNotEmpty()) {
             val smbFolders = SmbScanner.scanFolders(
                 locations = smbFoldersDirs,
@@ -104,7 +104,16 @@ object CreateFileListV1 {
                 val mystring = smbFolder.name.lowercase().trim()
                 val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
 
-                if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+                if (smbFolder.isDirectory) {
+                    if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+                } else {
+                    val nameNoExt = if (smbFolder.name.contains('.')) smbFolder.name.substringBeforeLast('.').lowercase().trim() else mystring
+                    val firstNoExt = nameNoExt.replace(Regex("[^A-Za-z0-9]+"), "")
+                    if (checkRe(first, excludeChapterRe) ||
+                        checkRe(mystring, excludeChapterRe) ||
+                        checkRe(nameNoExt, excludeChapterRe) ||
+                        checkRe(firstNoExt, excludeChapterRe)) continue
+                }
 
                 val second = smbFolder.uncPath
                 tempStringBuilder.append("$first ::: $second\n")

@@ -304,7 +304,7 @@ object CreateFileListV2 {
             }
         }
 
-        // Scan SMB directories for folders
+        // Scan SMB directories for folders and archive files
         if (smbFoldersDirs.isNotEmpty()) {
             val smbFolders = SmbScanner.scanFoldersWithDetails(
                 locations = smbFoldersDirs,
@@ -318,7 +318,16 @@ object CreateFileListV2 {
                 val mystring = smbFolder.name.lowercase().trim()
                 val first = mystring.replace(Regex("[^A-Za-z0-9]+"), "")
 
-                if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+                if (smbFolder.isDirectory) {
+                    if (checkRe(first, excludeChapterRe) || checkRe(mystring, excludeChapterRe)) continue
+                } else {
+                    val nameNoExt = if (smbFolder.name.contains('.')) smbFolder.name.substringBeforeLast('.').lowercase().trim() else mystring
+                    val firstNoExt = nameNoExt.replace(Regex("[^A-Za-z0-9]+"), "")
+                    if (checkRe(first, excludeChapterRe) ||
+                        checkRe(mystring, excludeChapterRe) ||
+                        checkRe(nameNoExt, excludeChapterRe) ||
+                        checkRe(firstNoExt, excludeChapterRe)) continue
+                }
 
                 val second = smbFolder.uncPath
                 tempStringBuilder.append("$first ::: $second\n")
@@ -342,27 +351,41 @@ object CreateFileListV2 {
                     result.namePressed
                 ) // 11 fields
 
-                val xmlItems = if (smbFolder.xmlContent != null) {
-                    getItemsXml(smbFolder.xmlContent)
+                if (smbFolder.isDirectory) {
+                    val xmlItems = if (smbFolder.xmlContent != null) {
+                        getItemsXml(smbFolder.xmlContent)
+                    } else {
+                        List(9) { "" }
+                    }
+
+                    val totalSizeReadable = convertBytesToReadableSize(smbFolder.totalSizeBytes)
+                    val avgSizeReadable = if (smbFolder.imageFilesCount > 0) {
+                        convertBytesToReadableSize(smbFolder.totalSizeBytes / smbFolder.imageFilesCount)
+                    } else "0 B"
+
+                    val endItems = listOf(
+                        smbFolder.itemCount.toString(),
+                        smbFolder.hasFolders.toString(),
+                        totalSizeReadable,
+                        smbFolder.imageFilesCount.toString(),
+                        avgSizeReadable
+                    )
+
+                    val fullRow = baseRow + xmlItems + endItems
+                    finalList.add(fullRow)
                 } else {
-                    List(9) { "" }
+                    val xmlItems = List(9) { "" }
+                    val readableSize = convertBytesToReadableSize(smbFolder.totalSizeBytes)
+                    val endItems = listOf(
+                        "1",
+                        "false",
+                        readableSize,
+                        "1",
+                        readableSize
+                    )
+                    val fullRow = baseRow + xmlItems + endItems
+                    finalList.add(fullRow)
                 }
-
-                val totalSizeReadable = convertBytesToReadableSize(smbFolder.totalSizeBytes)
-                val avgSizeReadable = if (smbFolder.imageFilesCount > 0) {
-                    convertBytesToReadableSize(smbFolder.totalSizeBytes / smbFolder.imageFilesCount)
-                } else "0 B"
-
-                val endItems = listOf(
-                    smbFolder.itemCount.toString(),
-                    smbFolder.hasFolders.toString(),
-                    totalSizeReadable,
-                    smbFolder.imageFilesCount.toString(),
-                    avgSizeReadable
-                )
-
-                val fullRow = baseRow + xmlItems + endItems
-                finalList.add(fullRow)
             }
         }
 

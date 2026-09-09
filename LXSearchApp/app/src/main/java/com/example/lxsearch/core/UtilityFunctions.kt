@@ -42,6 +42,8 @@ const val V2_XML_INFO = "ComicInfo.xml"
 val V2_END_ITEMS = listOf("Count Items", "Has Folders", "Total Size", "Count Files", "Average Size")
 val V2_LIST_CSV_HEADERS = LIST_CSV_HEADERS + V2_LIST_SUMMARY + V2_LIST + V2_END_ITEMS // 25 total
 val V2_VALID_EXT = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp")
+val ARCHIVE_EXTENSIONS = setOf(".cbz", ".zip", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt", ".gz", ".xz")
+val IMAGE_EXTENSIONS = setOf(".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".avif")
 
 // Directory paths
 const val MIHON_DOWNLOADS_DIR = "/storage/emulated/0/Vere2/Vere/Mihon/downloads"

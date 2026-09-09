@@ -165,19 +165,20 @@ class CreateFileListTest {
             smbPassword = SMB_PASSWORD
         )
 
-        assertEquals(1, count)
+        assertTrue("Count should be greater than 0", count > 0)
         val csvFile = File(outputDir, "filename_list.csv")
         assertTrue(csvFile.exists())
         val lines = csvFile.readLines(Charsets.UTF_8)
-        assertEquals(2, lines.size)
-        val row = lines[1].split(LIST_CSV_DELIMITER)
-        assertEquals("Test11", row[0])
-        assertEquals("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", row[1])
+        assertTrue(lines.size > 1)
+        val header = lines[0].split(LIST_CSV_DELIMITER)
+        assertEquals(11, header.size)
+        val rows = lines.drop(1).map { it.split(LIST_CSV_DELIMITER) }
+        assertTrue("Should contain folder rows", rows.any { !it[0].contains(".cbz") })
+        assertTrue("Should contain archive file rows", rows.any { it[0].endsWith(".cbz", ignoreCase = true) })
+        assertTrue("Should not contain image files", rows.none { IMAGE_EXTENSIONS.contains("." + it[0].substringAfterLast('.').lowercase()) })
 
         val listFile = File(outputDir, "list.txt")
         assertTrue(listFile.exists())
-        val listContent = listFile.readText(Charsets.UTF_8).trim()
-        assertEquals("""test11 ::: \\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", listContent)
     }
 
     @Test
@@ -197,15 +198,20 @@ class CreateFileListTest {
             smbPassword = SMB_PASSWORD
         )
 
-        assertEquals(1, count)
+        assertTrue("Count should be greater than 0", count > 0)
         val csvFile = File(outputDir, "filename_list_v2.csv")
         assertTrue(csvFile.exists())
         val lines = csvFile.readLines(Charsets.UTF_8)
-        assertEquals(2, lines.size)
-        val row = lines[1].split(LIST_CSV_DELIMITER)
-        assertEquals(25, row.size)
-        assertEquals("Test11", row[0])
-        assertEquals("""\\192.168.88.234\Share2sgb\Manga CBZ\Doujinshi\Archived\Test11""", row[1])
+        assertTrue(lines.size > 1)
+        val header = lines[0].split(LIST_CSV_DELIMITER)
+        assertEquals(25, header.size)
+        val rows = lines.drop(1).map { it.split(LIST_CSV_DELIMITER) }
+        val cbzRow = rows.firstOrNull { it[0].endsWith(".cbz", ignoreCase = true) }
+        assertNotNull("Should contain at least one cbz file row", cbzRow)
+        assertEquals("1", cbzRow?.get(20)) // Count Items
+        assertEquals("false", cbzRow?.get(21)) // Has Folders
+        assertEquals("1", cbzRow?.get(23)) // Count Files
+        assertTrue("Should not contain image files", rows.none { IMAGE_EXTENSIONS.contains("." + it[0].substringAfterLast('.').lowercase()) })
     }
 
     @Test

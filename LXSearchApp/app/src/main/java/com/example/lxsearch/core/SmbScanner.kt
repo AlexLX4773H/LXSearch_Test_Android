@@ -17,8 +17,10 @@ import java.util.EnumSet
 
 data class SmbFolderBasic(
     val name: String,
-    val uncPath: String
+    val uncPath: String,
+    val isDirectory: Boolean = true
 )
+typealias SmbItemBasic = SmbFolderBasic
 
 data class SmbFolderDetails(
     val name: String,
@@ -27,8 +29,10 @@ data class SmbFolderDetails(
     val itemCount: Int = 0,
     val hasFolders: Boolean = false,
     val totalSizeBytes: Long = 0L,
-    val imageFilesCount: Int = 0
+    val imageFilesCount: Int = 0,
+    val isDirectory: Boolean = true
 )
+typealias SmbItemDetails = SmbFolderDetails
 
 object SmbScanner {
 
@@ -108,11 +112,16 @@ object SmbScanner {
 
                                     for (item in items) {
                                         if (item.fileName == "." || item.fileName == "..") continue
+                                        val childPath = if (currentPath.isEmpty()) item.fileName else "$currentPath\\${item.fileName}"
+                                        val uncPath = "\\\\$host\\${comp.share}\\$childPath"
                                         if (isDirectory(item)) {
-                                            val childPath = if (currentPath.isEmpty()) item.fileName else "$currentPath\\${item.fileName}"
-                                            val uncPath = "\\\\$host\\${comp.share}\\$childPath"
-                                            result.add(SmbFolderBasic(item.fileName, uncPath))
+                                            result.add(SmbFolderBasic(item.fileName, uncPath, isDirectory = true))
                                             queue.add(childPath)
+                                        } else {
+                                            val ext = if (item.fileName.contains('.')) "." + item.fileName.substringAfterLast('.').lowercase() else ""
+                                            if (ARCHIVE_EXTENSIONS.contains(ext) && !IMAGE_EXTENSIONS.contains(ext)) {
+                                                result.add(SmbFolderBasic(item.fileName, uncPath, isDirectory = false))
+                                            }
                                         }
                                     }
                                 }
@@ -173,10 +182,10 @@ object SmbScanner {
 
                                     for (item in items) {
                                         if (item.fileName == "." || item.fileName == "..") continue
-                                        if (isDirectory(item)) {
-                                            val childPath = if (currentPath.isEmpty()) item.fileName else "$currentPath\\${item.fileName}"
-                                            val uncPath = "\\\\$host\\${comp.share}\\$childPath"
+                                        val childPath = if (currentPath.isEmpty()) item.fileName else "$currentPath\\${item.fileName}"
+                                        val uncPath = "\\\\$host\\${comp.share}\\$childPath"
 
+                                        if (isDirectory(item)) {
                                             var itemCount = 0
                                             var hasFolders = false
                                             var totalSize = 0L
@@ -234,10 +243,27 @@ object SmbScanner {
                                                     itemCount = itemCount,
                                                     hasFolders = hasFolders,
                                                     totalSizeBytes = totalSize,
-                                                    imageFilesCount = imgCount
+                                                    imageFilesCount = imgCount,
+                                                    isDirectory = true
                                                 )
                                             )
                                             queue.add(childPath)
+                                        } else {
+                                            val ext = if (item.fileName.contains('.')) "." + item.fileName.substringAfterLast('.').lowercase() else ""
+                                            if (ARCHIVE_EXTENSIONS.contains(ext) && !IMAGE_EXTENSIONS.contains(ext)) {
+                                                result.add(
+                                                    SmbFolderDetails(
+                                                        name = item.fileName,
+                                                        uncPath = uncPath,
+                                                        xmlContent = null,
+                                                        itemCount = 1,
+                                                        hasFolders = false,
+                                                        totalSizeBytes = item.endOfFile,
+                                                        imageFilesCount = 1,
+                                                        isDirectory = false
+                                                    )
+                                                )
+                                            }
                                         }
                                     }
                                 }
