@@ -208,7 +208,16 @@ while val != '000':
     elif val == '000':
         break
     else:
-        vals = parse_input_value(val)["Main Titles"]
+        val_clean = val.strip()
+        if re.search(r'(?i)(?:[\s\-_]+|\b)mtl$', val_clean) and val_clean.upper() != 'MTL':
+            val_clean = re.sub(r'(?i)[\s\-_]*mtl$', '', val_clean).strip()
+        vals = parse_input_value(val_clean)["Main Titles"]
+        vals = [
+            re.sub(r'(?i)[\s\-_]*mtl$', '', item.strip()).strip()
+            if re.search(r'(?i)(?:[\s\-_]+|\b)mtl$', item.strip()) and item.strip().upper() != 'MTL'
+            else item
+            for item in vals
+        ]
         vals = split_string_and_return_1(vals, exclude_input_chapter_sep)
         vals = string_press_list(vals)
         vals = [re.sub(r'\d+$', '', item) for item in vals]

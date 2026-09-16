@@ -49,6 +49,28 @@ class SearchEngineTest {
         assertTrue(resExact.found)
         assertEquals(1, resExact.count)
         assertEquals("[Circle] Test Manga [Author]", resExact.results[0].name)
+
+        // Test default search with 'MTL' at the end
+        val resMtl = engine.search("Test Manga MTL")
+        assertTrue("Searching with 'Test Manga MTL' should find the book", resMtl.found)
+        assertEquals(1, resMtl.count)
+        assertEquals("[Circle] Test Manga [Author]", resMtl.results[0].name)
+
+        // Test default search with ' - MTL' at the end
+        val resDashMtl = engine.search("Test Manga - MTL")
+        assertTrue("Searching with 'Test Manga - MTL' should find the book", resDashMtl.found)
+        assertEquals(1, resDashMtl.count)
+        assertEquals("[Circle] Test Manga [Author]", resDashMtl.results[0].name)
+
+        // Test default search with lowercase 'mtl' and trailing spaces
+        val resLowerMtl = engine.search("Test Manga mtl ")
+        assertTrue("Searching with 'Test Manga mtl ' should find the book", resLowerMtl.found)
+        assertEquals(1, resLowerMtl.count)
+
+        // Test default search with 'MTL [Author]'
+        val resMtlBracket = engine.search("Test Manga MTL [Author]")
+        assertTrue("Searching with 'Test Manga MTL [Author]' should find the book", resMtlBracket.found)
+        assertEquals(1, resMtlBracket.count)
     }
 
     @Test

@@ -189,9 +189,24 @@ class SearchEngine {
 
     /** Default search: parse input value and search Name Pressed */
     private fun searchDefault(text: String): SearchResponse {
-        val parsed = parseInputValue(text)
+        var cleanText = text.trim()
+        val mtlEndPattern = Regex("""(?i)(?:[\s\-_]+|\b)mtl$""")
+        val mtlRemovePattern = Regex("""(?i)[\s\-_]*mtl$""")
+
+        if (cleanText.contains(mtlEndPattern) && !cleanText.equals("MTL", ignoreCase = true)) {
+            cleanText = cleanText.replace(mtlRemovePattern, "").trim()
+        }
+        val parsed = parseInputValue(cleanText)
         @Suppress("UNCHECKED_CAST")
         var vals = (parsed["Main Titles"] as? List<String>) ?: emptyList()
+        vals = vals.map { item ->
+            val trimmed = item.trim()
+            if (trimmed.contains(mtlEndPattern) && !trimmed.equals("MTL", ignoreCase = true)) {
+                trimmed.replace(mtlRemovePattern, "").trim()
+            } else {
+                item
+            }
+        }
         vals = splitStringAndReturn1(vals, excludeInputChapterSep)
         vals = stringPressList(vals)
         vals = vals.map { it.replace(Regex("""\d+$"""), "") }
