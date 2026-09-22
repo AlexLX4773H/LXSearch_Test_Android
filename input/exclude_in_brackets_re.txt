@@ -25,3 +25,7 @@
 ^d[0-9]+
 [\w]-scans$
 part\s*[0-9]+
+^chapter.*
+^english.*
+.*mtl$
+.*patreon$

@@ -85,8 +85,6 @@ abandoned
 vanilla
 abbb
 comfy pillow x obsoletezero
-原神
-九条裟羅
 催眠
 translated
 haragami
@@ -98,6 +96,16 @@ vgt13
 scanmtl
 colorized
 original
+maosimp
+ai generated
+ragssgar_
+juice box factory
+rewrite
+duckguy64
+seitokai ni mo ana wa aru
+leo1231@
+shikemoku 1-ponme
+wurthy1337
 """.trimIndent()
 
     val DEFAULT_BRACKETS_RE = """
@@ -128,6 +136,10 @@ original
 ^d[0-9]+
 [\w]-scans$
 part\s*[0-9]+
+^chapter.*
+^english.*
+.*mtl$
+.*patreon$
 """.trimIndent()
 
     val DEFAULT_CHAPTER_SEP = """

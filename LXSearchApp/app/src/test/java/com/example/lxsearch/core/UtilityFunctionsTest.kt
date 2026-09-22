@@ -5,6 +5,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import com.example.lxsearch.data.InputFileManager
 
 class UtilityFunctionsTest {
 
@@ -125,4 +126,39 @@ class UtilityFunctionsTest {
         assertEquals("new completed content", destFile.readText())
         assertFalse(tempFile.exists())
     }
+
+    @Test
+    fun testBracketRegexExclusions() {
+        val regexList = InputFileManager.DEFAULT_BRACKETS_RE.lines().filter { it.isNotBlank() }
+
+        // Starts with chapter -> should be excluded (checkValid returns false)
+        assertFalse(checkValid("chapter 1", regexList))
+        assertFalse(checkValid("chapter", regexList))
+        assertFalse(checkValid("Chapter 25", regexList))
+        assertFalse(checkValid("CHAPTER-01", regexList))
+        assertTrue(checkValid("my chapter", regexList))
+
+        // Starts with english -> should be excluded
+        assertFalse(checkValid("english", regexList))
+        assertFalse(checkValid("English", regexList))
+        assertFalse(checkValid("english translation", regexList))
+        assertFalse(checkValid("English Scans", regexList))
+        assertTrue(checkValid("not english", regexList))
+
+        // Ends with mtl -> should be excluded
+        assertFalse(checkValid("mtl", regexList))
+        assertFalse(checkValid("MTL", regexList))
+        assertFalse(checkValid("scan mtl", regexList))
+        assertFalse(checkValid("Group MTL", regexList))
+        assertFalse(checkValid("scanmtl", regexList))
+        assertTrue(checkValid("mtl scans", regexList))
+
+        // Ends with patreon -> should be excluded
+        assertFalse(checkValid("patreon", regexList))
+        assertFalse(checkValid("Patreon", regexList))
+        assertFalse(checkValid("author patreon", regexList))
+        assertFalse(checkValid("group-patreon", regexList))
+        assertTrue(checkValid("patreon release", regexList))
+    }
 }
+
